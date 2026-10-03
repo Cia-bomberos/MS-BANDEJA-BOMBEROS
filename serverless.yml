@@ -1,5 +1,8 @@
 service: bomberos-f3-bandeja
 
+plugins:
+  - serverless-python-requirements
+
 # Anchor reutilizado en el "authorizer:" de cada función HTTP (evita repetir
 # el mismo bloque 11 veces). Debe declararse antes de cualquier *alias que
 # lo use, por eso va al principio del archivo.
@@ -9,6 +12,18 @@ custom:
     type: COGNITO_USER_POOLS
     authorizerId:
       Ref: ApiGatewayAuthorizer
+
+  # psycopg2 tiene extensión en C y no es portable tal cual a Lambda: hay que
+  # empaquetarlo para Amazon Linux. No usamos dockerizePip porque el agente
+  # de Jenkins ya corre Linux x86_64 -- la misma plataforma del runtime de
+  # Lambda (python3.11 sobre Amazon Linux 2) -- así que el wheel manylinux
+  # que descarga pip en ese mismo contenedor ya es compatible, sin necesitar
+  # Docker-in-Docker.
+  pythonRequirements:
+    dockerizePip: false
+    slim: true
+    useDownloadCache: true
+    useStaticCache: true
 
 provider:
   name: aws

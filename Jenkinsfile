@@ -97,6 +97,35 @@ pipeline {
             }
         }
 
+        stage('Aplicar Migraciones (RDS)') {
+            when {
+                allOf {
+                    expression { params.DB_HOST?.trim() != '' }
+                    anyOf { branch 'development'; branch 'qa'; branch 'uat'; branch 'main' }
+                }
+            }
+            agent {
+                docker {
+                    image 'python:3.11-slim'
+                    reuseNode true
+                }
+            }
+            steps {
+                withEnv([
+                    "DB_HOST=${params.DB_HOST}",
+                    "DB_PORT=5432",
+                    "DB_NAME=${params.DB_NAME}",
+                    "DB_USER=${params.DB_USER}",
+                    "DB_PASSWORD=${params.DB_PASSWORD}",
+                ]) {
+                    sh '''
+                        pip install --no-cache-dir --quiet psycopg2-binary
+                        python scripts/aplicar_migraciones.py
+                    '''
+                }
+            }
+        }
+
         stage('Deploy omitido (sin credenciales)') {
             when {
                 allOf {
@@ -160,13 +189,18 @@ def executeServerlessDeploy(String targetStage) {
             "NPM_CONFIG_PREFIX=${env.WORKSPACE}/.npm-global"
         ]) {
             sh """
+                apt-get update -qq && apt-get install -y -qq python3 python3-pip > /dev/null
+                pip install --break-system-packages --quiet boto3
+            """
+            // Falla rápido y con un mensaje claro si falta MS-SEGURIDAD-BOMBEROS
+            // en este stage, o crea el bucket de config si todavía no existe.
+            sh "python3 scripts/verificar_dependencias.py --stage ${targetStage}"
+            sh """
                 npm install -g serverless@3
+                npm install
                 ./.npm-global/bin/serverless deploy --stage ${targetStage} --verbose
             """
-            sh """
-                pip install --break-system-packages --quiet boto3
-                python3 scripts/publicar_config.py --stage ${targetStage}
-            """
+            sh "python3 scripts/publicar_config.py --stage ${targetStage}"
         }
     }
 }
