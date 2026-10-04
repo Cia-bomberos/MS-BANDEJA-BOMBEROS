@@ -19,14 +19,43 @@ mismo Cognito User Pool que `MS-SEGURIDAD-BOMBEROS` para autenticación y roles.
 - **2 jobs programados** (cada 1h): reclasificación de prioridades (RN-0017) y
   archivado automático tras 3 días en "Atendido" (RN-0026).
 
+### Dependencia con `MS-SEGURIDAD-BOMBEROS`
+
+`serverless.yml` referencia el `UserPoolId` del stack de seguridad vía
+cross-stack reference (`${cf:bomberos-f3-backend-<stage>.UserPoolId}`). Esto
+significa que **seguridad tiene que estar deployado en un stage antes de
+poder desplegar bandeja en ese mismo stage** — si no, el deploy falla.
+`scripts/verificar_dependencias.py` corre automáticamente antes de cada
+deploy (ver Jenkinsfile) y lo detecta temprano, con un mensaje claro en vez
+de un error críptico de CloudFormation. Ese mismo script también crea el
+bucket de config (`bomberos-config-<stage>`) si todavía no existe.
+
+### `psycopg2` en Lambda
+
+`psycopg2` tiene una extensión en C y no es portable tal cual al runtime de
+Lambda (necesita compilarse para Amazon Linux). Se resolvió con el plugin
+`serverless-python-requirements` (ver `serverless.yml` y `requirements.txt`,
+separado de `requirements-dev.txt` que es solo para tests). No usa
+`dockerizePip` porque el agente de Jenkins que corre el deploy ya es Linux
+x86_64 — la misma plataforma del runtime de Lambda — así que el wheel
+manylinux que descarga pip ahi mismo ya es compatible, sin necesitar
+Docker-in-Docker.
+
 ### Resiliencia a la rotación de credenciales de AWS Academy
 
-Igual que hizo el PM en `MS-SEGURIDAD-BOMBEROS`: después de cada deploy,
-`scripts/publicar_config.py` lee el `ServiceEndpoint` del stack y lo sube al
-**mismo bucket de config** que ya usa seguridad (`bomberos-config-<stage>`),
-bajo la key `bandeja-config.json` (no pisa el `config.json` de seguridad). El
-frontend lee esa key para tener siempre la URL del API actualizada, sin
-depender de que nadie le avise cuándo rotaron las credenciales del Learner Lab.
+Después de cada deploy, `scripts/publicar_config.py` lee el `ServiceEndpoint`
+del stack y lo sube a un bucket de config propio de bandeja
+(`bomberos-f3-bandeja-config-<stage>`), bajo la key `bandeja-config.json`.
+
+**Corrección (2026-10-03):** esto originalmente decía que reusaba "el mismo
+bucket que ya resolvió el PM para seguridad" (`bomberos-config-<stage>`).
+Eso era incorrecto en dos sentidos: (1) ese nombre genérico ya estaba tomado
+globalmente por una cuenta de AWS ajena al curso (los nombres de bucket S3
+son únicos en todo AWS, no solo dentro de este proyecto), y (2) al revisar
+el repo real de seguridad (`Cia-Bomberos---Backend`) no existe ningún
+mecanismo de config en S3 ahí — nunca se implementó del lado de seguridad.
+**Pendiente:** confirmar con Sebastian (frontend) cómo obtiene hoy la URL
+del API, y si corresponde, coordinar que lea desde este bucket.
 
 ### Endpoints
 
@@ -61,13 +90,8 @@ Sección solo lee/escribe su propia sección.
    reintente solo en la próxima corrida a que falsee una subida que no pasó).
    Hasta que esto se implemente, ningún documento "Archivado" va a poder
    eliminarse (RN-0028 lo exige explícitamente).
-2. **Lambda Layer para `psycopg2`.** El `requirements-dev.txt` trae
-   `psycopg2-binary` para correr los tests localmente, pero ese paquete no es
-   portable tal cual a Lambda (necesita compilarse para Amazon Linux). Antes
-   del primer deploy real hay que agregar el plugin
-   `serverless-python-requirements` con `dockerizePip: true`, o un Lambda
-   Layer con `psycopg2` precompilado — si no, los Lambdas van a fallar en
-   runtime con un error de import, no en el deploy.
+2. ~~Lambda Layer para `psycopg2`~~ — **Resuelto** (ver sección "`psycopg2`
+   en Lambda" más arriba).
 3. **No hay tabla `usuarios` en el RDS.** El historial guarda `usuario_sub` /
    `usuario_nombre` / `seccion` tal como vienen del token de Cognito
    (denormalizado), porque no existe ningún mecanismo que sincronice usuarios

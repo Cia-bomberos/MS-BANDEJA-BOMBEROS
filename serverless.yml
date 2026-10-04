@@ -14,13 +14,17 @@ custom:
       Ref: ApiGatewayAuthorizer
 
   # psycopg2 tiene extensión en C y no es portable tal cual a Lambda: hay que
-  # empaquetarlo para Amazon Linux. No usamos dockerizePip porque el agente
-  # de Jenkins ya corre Linux x86_64 -- la misma plataforma del runtime de
-  # Lambda (python3.11 sobre Amazon Linux 2) -- así que el wheel manylinux
-  # que descarga pip en ese mismo contenedor ya es compatible, sin necesitar
-  # Docker-in-Docker.
+  # empaquetarlo para Amazon Linux. 'non-linux' hace esto automático para
+  # los dos casos que usamos:
+  #   - Deploy desde Jenkins (agente Linux x86_64, igual al runtime de
+  #     Lambda): NO dockeriza, pip instala directo y el wheel manylinux ya
+  #     es compatible -- deploy mas rapido, sin Docker-in-Docker.
+  #   - Deploy manual desde Windows/Mac (ej. para probar algo sin esperar a
+  #     Jenkins): SI dockeriza (necesita Docker Desktop corriendo), porque
+  #     ahi un pip install directo traeria el wheel de Windows/Mac, no el
+  #     de Linux, y el Lambda fallaria en runtime igual que al principio.
   pythonRequirements:
-    dockerizePip: false
+    dockerizePip: 'non-linux'
     slim: true
     useDownloadCache: true
     useStaticCache: true

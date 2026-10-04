@@ -7,10 +7,18 @@ CloudFormation:
 1. El stack de MS-SEGURIDAD-BOMBEROS para este mismo stage tiene que existir,
    porque serverless.yml referencia su UserPoolId vía ${cf:...} (cross-stack
    reference). Si no existe, CloudFormation falla al resolver el export.
-2. El bucket de config compartido (bomberos-config-<stage>) tiene que existir
-   para que scripts/publicar_config.py pueda escribir ahi al final del
-   deploy. Este script lo crea si falta (a diferencia del stack de
-   seguridad, esto si lo podemos resolver nosotros mismos).
+2. El bucket de config propio de bandeja (bomberos-f3-bandeja-config-<stage>)
+   tiene que existir para que scripts/publicar_config.py pueda escribir ahi
+   al final del deploy. Este script lo crea si falta.
+
+   NOTA (2026-10-03): el nombre tiene el prefijo del servicio porque los
+   nombres de bucket S3 son unicos a nivel GLOBAL (entre cuentas de AWS, no
+   solo dentro de este proyecto). Un nombre generico como
+   "bomberos-config-<stage>" ya estaba tomado por una cuenta ajena al curso.
+   Ademas, se confirmo que MS-SEGURIDAD-BOMBEROS (repo real:
+   Cia-Bomberos---Backend) no tiene ningun mecanismo de config en S3 -- la
+   idea original de "reusar su bucket" no aplicaba. Pendiente: confirmar
+   con el equipo de frontend como lee hoy la URL del API.
 
 Uso:
     python scripts/verificar_dependencias.py --stage dev
@@ -23,7 +31,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 SECURITY_SERVICE_NAME = "bomberos-f3-backend"
-CONFIG_BUCKET_PREFIX = "bomberos-config"
+CONFIG_BUCKET_PREFIX = "bomberos-f3-bandeja-config"
 REGION = "us-east-1"
 
 

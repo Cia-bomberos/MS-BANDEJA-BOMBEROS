@@ -1,9 +1,17 @@
 """
-Publica la URL del API de este stage en el mismo bucket de config que ya
-usa MS-SEGURIDAD-BOMBEROS (bomberos-config-<stage>), para que el frontend
-tenga siempre el dato actualizado sin importar cuándo rotaron las
-credenciales de AWS Academy -- mismo mecanismo que resolvió el PM para
-seguridad, reutilizado acá para no duplicar infraestructura.
+Publica la URL del API de este stage en un bucket de config propio de
+bandeja, para que el frontend tenga siempre el dato actualizado sin
+importar cuándo rotaron las credenciales de AWS Academy.
+
+NOTA (2026-10-03): originalmente esto asumía que iba a reusar un bucket
+compartido que ya tenía resuelto MS-SEGURIDAD-BOMBEROS
+(`bomberos-config-<stage>`). Al revisar el repo real de seguridad
+(Cia-Bomberos---Backend) resultó que ESE MECANISMO NO EXISTE AHI --
+seguridad no publica ningún config a S3. Por eso este script usa su
+propio bucket, con un nombre único a bandeja para no chocar con el
+namespace global de S3. PENDIENTE: confirmar con Sebastian/Nico cómo
+lee hoy el frontend la URL del API (¿hardcodeada? ¿nada todavía?) y, si
+corresponde, hacer que lea este bucket.
 
 Se corre después de `serverless deploy` (ver Jenkinsfile).
 
@@ -17,7 +25,7 @@ import json
 import boto3
 
 SERVICE_NAME = "bomberos-f3-bandeja"
-CONFIG_KEY = "bandeja-config.json"  # key separada de config.json (seguridad), mismo bucket
+CONFIG_KEY = "bandeja-config.json"
 
 
 def obtener_outputs(stage: str) -> dict:
@@ -46,7 +54,7 @@ def main():
         "documentsBucket": documents_bucket,
     }
 
-    config_bucket = f"bomberos-config-{args.stage}"
+    config_bucket = f"bomberos-f3-bandeja-config-{args.stage}"
     s3 = boto3.client("s3")
     s3.put_object(
         Bucket=config_bucket,
