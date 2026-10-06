@@ -30,18 +30,26 @@ deploy (ver Jenkinsfile) y lo detecta temprano, con un mensaje claro en vez
 de un error críptico de CloudFormation. Ese mismo script también crea el
 bucket de config (`bomberos-config-<stage>`) si todavía no existe.
 
-**User Pool en otra cuenta de AWS.** Si el stack de seguridad vive en otra
-cuenta (cada integrante de AWS Academy tiene su propio sandbox), exportar
-`USER_POOL_ARN` antes de desplegar y el authorizer validará tokens de ese pool
-en vez de buscar el stack local:
+**User Pool en otra cuenta de AWS.** El pool de seguridad vive en la cuenta del
+PM (cada integrante de AWS Academy tiene su propio sandbox). El ARN que necesita
+el authorizer se arma con `scripts/resolver_user_pool.py`:
+
+- `userPoolId`: se lee del `config.json` publico de seguridad
+  (`https://bomberos-config-<stage>.s3.amazonaws.com/config.json`), asi cada
+  stage (dev/qa/uat) toma su pool sin IDs escritos en el codigo.
+- ID de cuenta: el config no lo trae. Es una constante en el script
+  (`DEFAULT_SECURITY_ACCOUNT_ID`), sobrescribible con `SECURITY_ACCOUNT_ID`.
+- `USER_POOL_ARN` explicito gana sobre todo lo anterior.
+
+Deploy manual (CloudShell):
 
 ```
-export USER_POOL_ARN=arn:aws:cognito-idp:us-east-1:<ID_CUENTA_PM>:userpool/us-east-1_1GJaJYmEV
+export USER_POOL_ARN=$(python3 scripts/resolver_user_pool.py --stage dev)
 npx serverless@3 deploy --stage dev
 ```
 
-El ARN lo obtiene el dueño del pool con
-`aws cognito-idp describe-user-pool --user-pool-id us-east-1_1GJaJYmEV --query UserPool.Arn --output text`.
+El Jenkinsfile hace lo mismo antes de cada deploy. Si no se puede resolver, el
+deploy cae al pool del stack de seguridad de la misma cuenta.
 
 ### `psycopg2` en Lambda
 
@@ -60,15 +68,13 @@ Después de cada deploy, `scripts/publicar_config.py` lee el `ServiceEndpoint`
 del stack y lo sube a un bucket de config propio de bandeja
 (`bomberos-f3-bandeja-config-<stage>`), bajo la key `bandeja-config.json`.
 
-**Corrección (2026-10-03):** esto originalmente decía que reusaba "el mismo
-bucket que ya resolvió el PM para seguridad" (`bomberos-config-<stage>`).
-Eso era incorrecto en dos sentidos: (1) ese nombre genérico ya estaba tomado
-globalmente por una cuenta de AWS ajena al curso (los nombres de bucket S3
-son únicos en todo AWS, no solo dentro de este proyecto), y (2) al revisar
-el repo real de seguridad (`Cia-Bomberos---Backend`) no existe ningún
-mecanismo de config en S3 ahí — nunca se implementó del lado de seguridad.
-**Pendiente:** confirmar con Sebastian (frontend) cómo obtiene hoy la URL
-del API, y si corresponde, coordinar que lea desde este bucket.
+**Aclaración sobre el bucket de config.** El bucket `bomberos-config-<stage>`
+es del PM y vive en SU cuenta de AWS (ahí seguridad publica su `config.json`).
+Desde una cuenta distinta recibe 403 al escribir, así que bandeja publica en un
+bucket propio (`bomberos-f3-bandeja-config-<stage>`) con lectura pública solo
+para `bandeja-config.json`. Si se quiere unificar, el PM puede dar permiso de
+`s3:PutObject` sobre esa key a la cuenta que despliega, o el deploy puede correr
+desde su cuenta (Jenkins) y escribir ahí directamente.
 
 ### Endpoints
 

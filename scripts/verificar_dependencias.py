@@ -11,14 +11,9 @@ CloudFormation:
    tiene que existir para que scripts/publicar_config.py pueda escribir ahi
    al final del deploy. Este script lo crea si falta.
 
-   NOTA (2026-10-03): el nombre tiene el prefijo del servicio porque los
-   nombres de bucket S3 son unicos a nivel GLOBAL (entre cuentas de AWS, no
-   solo dentro de este proyecto). Un nombre generico como
-   "bomberos-config-<stage>" ya estaba tomado por una cuenta ajena al curso.
-   Ademas, se confirmo que MS-SEGURIDAD-BOMBEROS (repo real:
-   Cia-Bomberos---Backend) no tiene ningun mecanismo de config en S3 -- la
-   idea original de "reusar su bucket" no aplicaba. Pendiente: confirmar
-   con el equipo de frontend como lee hoy la URL del API.
+   NOTA: `bomberos-config-<stage>` es del PM (otra cuenta), por eso se usa un
+   bucket propio con prefijo del servicio. Los nombres de bucket S3 son únicos
+   a nivel global.
 
 Uso:
     python scripts/verificar_dependencias.py --stage dev
@@ -30,6 +25,8 @@ import sys
 
 import boto3
 from botocore.exceptions import ClientError
+
+from resolver_user_pool import resolver_arn
 
 SECURITY_SERVICE_NAME = "bomberos-f3-backend"
 CONFIG_BUCKET_PREFIX = "bomberos-f3-bandeja-config"
@@ -92,9 +89,14 @@ def main():
     parser.add_argument("--stage", required=True, choices=["dev", "qa", "uat", "prod"])
     args = parser.parse_args()
 
-    pool_arn = os.environ.get("USER_POOL_ARN", "").strip()
+    try:
+        pool_arn = resolver_arn(args.stage)
+    except Exception as e:
+        pool_arn = None
+        print(f"Aviso: no se pudo resolver el User Pool desde el config de seguridad ({e}). "
+              f"Se intenta con el stack de seguridad de esta misma cuenta.")
     if pool_arn:
-        print(f"OK: se usara el User Pool externo {pool_arn} (se omite el check del stack local de seguridad).")
+        print(f"OK: el authorizer usara el User Pool {pool_arn} (se omite el check del stack local).")
     else:
         verificar_stack_seguridad(args.stage)
     asegurar_bucket_config(args.stage)

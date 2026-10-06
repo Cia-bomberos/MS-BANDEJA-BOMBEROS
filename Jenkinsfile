@@ -195,7 +195,12 @@ def executeServerlessDeploy(String targetStage) {
             // Falla rápido y con un mensaje claro si falta MS-SEGURIDAD-BOMBEROS
             // en este stage, o crea el bucket de config si todavía no existe.
             sh "python3 scripts/verificar_dependencias.py --stage ${targetStage}"
+            // El authorizer valida contra el User Pool de seguridad, que puede
+            // vivir en otra cuenta: el ARN se arma con el config.json publico del
+            // stage (ver scripts/resolver_user_pool.py).
             sh """
+                export USER_POOL_ARN=\$(python3 scripts/resolver_user_pool.py --stage ${targetStage})
+                echo "User Pool del authorizer: \$USER_POOL_ARN"
                 npm install -g serverless@3
                 npm install
                 ./.npm-global/bin/serverless deploy --stage ${targetStage} --verbose

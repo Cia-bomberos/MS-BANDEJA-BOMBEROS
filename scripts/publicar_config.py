@@ -3,15 +3,10 @@ Publica la URL del API de este stage en un bucket de config propio de
 bandeja, para que el frontend tenga siempre el dato actualizado sin
 importar cuándo rotaron las credenciales de AWS Academy.
 
-NOTA (2026-10-03): originalmente esto asumía que iba a reusar un bucket
-compartido que ya tenía resuelto MS-SEGURIDAD-BOMBEROS
-(`bomberos-config-<stage>`). Al revisar el repo real de seguridad
-(Cia-Bomberos---Backend) resultó que ESE MECANISMO NO EXISTE AHI --
-seguridad no publica ningún config a S3. Por eso este script usa su
-propio bucket, con un nombre único a bandeja para no chocar con el
-namespace global de S3. PENDIENTE: confirmar con Sebastian/Nico cómo
-lee hoy el frontend la URL del API (¿hardcodeada? ¿nada todavía?) y, si
-corresponde, hacer que lea este bucket.
+NOTA: `bomberos-config-<stage>` es del PM y vive en su cuenta (ahí seguridad
+publica su config.json); desde otra cuenta da 403. Por eso este script publica
+en un bucket propio de bandeja, con lectura pública solo para esta key. Si se
+desplegara desde la cuenta del PM (Jenkins), podría escribir en el suyo.
 
 Se corre después de `serverless deploy` (ver Jenkinsfile).
 
