@@ -7,6 +7,12 @@ plugins:
 # el mismo bloque 11 veces). Debe declararse antes de cualquier *alias que
 # lo use, por eso va al principio del archivo.
 custom:
+  # ARN del User Pool que valida el authorizer. Si se define USER_POOL_ARN
+  # (ej. el pool de seguridad que vive en OTRA cuenta de AWS Academy), se usa
+  # ese. Si no, cae al pool del stack de seguridad de esta misma cuenta.
+  userPoolArn: ${env:USER_POOL_ARN, self:custom.localUserPoolArn}
+  localUserPoolArn: arn:aws:cognito-idp:${aws:region}:${aws:accountId}:userpool/${cf:bomberos-f3-backend-${sls:stage}.UserPoolId}
+
   cognitoAuthorizer: &cognitoAuthorizer
     name: ApiGatewayAuthorizer
     type: COGNITO_USER_POOLS
@@ -172,7 +178,7 @@ resources:
         IdentitySource: method.request.header.Authorization
         RestApiId: !Ref ApiGatewayRestApi
         ProviderARNs:
-          - arn:aws:cognito-idp:${aws:region}:${aws:accountId}:userpool/${cf:bomberos-f3-backend-${sls:stage}.UserPoolId}
+          - ${self:custom.userPoolArn}
 
     # ---------- Bucket de documentos (PDFs) ----------
     DocumentsBucket:

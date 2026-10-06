@@ -30,6 +30,19 @@ deploy (ver Jenkinsfile) y lo detecta temprano, con un mensaje claro en vez
 de un error críptico de CloudFormation. Ese mismo script también crea el
 bucket de config (`bomberos-config-<stage>`) si todavía no existe.
 
+**User Pool en otra cuenta de AWS.** Si el stack de seguridad vive en otra
+cuenta (cada integrante de AWS Academy tiene su propio sandbox), exportar
+`USER_POOL_ARN` antes de desplegar y el authorizer validará tokens de ese pool
+en vez de buscar el stack local:
+
+```
+export USER_POOL_ARN=arn:aws:cognito-idp:us-east-1:<ID_CUENTA_PM>:userpool/us-east-1_1GJaJYmEV
+npx serverless@3 deploy --stage dev
+```
+
+El ARN lo obtiene el dueño del pool con
+`aws cognito-idp describe-user-pool --user-pool-id us-east-1_1GJaJYmEV --query UserPool.Arn --output text`.
+
 ### `psycopg2` en Lambda
 
 `psycopg2` tiene una extensión en C y no es portable tal cual al runtime de

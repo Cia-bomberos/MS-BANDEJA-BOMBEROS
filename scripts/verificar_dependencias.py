@@ -25,6 +25,7 @@ Uso:
 """
 
 import argparse
+import os
 import sys
 
 import boto3
@@ -91,7 +92,11 @@ def main():
     parser.add_argument("--stage", required=True, choices=["dev", "qa", "uat", "prod"])
     args = parser.parse_args()
 
-    verificar_stack_seguridad(args.stage)
+    pool_arn = os.environ.get("USER_POOL_ARN", "").strip()
+    if pool_arn:
+        print(f"OK: se usara el User Pool externo {pool_arn} (se omite el check del stack local de seguridad).")
+    else:
+        verificar_stack_seguridad(args.stage)
     asegurar_bucket_config(args.stage)
     print("\nDependencias OK, se puede desplegar.")
 
