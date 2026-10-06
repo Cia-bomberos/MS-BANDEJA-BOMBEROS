@@ -20,6 +20,7 @@ Uso:
 """
 
 import argparse
+import json
 import os
 import sys
 
@@ -59,29 +60,77 @@ def verificar_stack_seguridad(stage: str):
     print(f"OK: '{stack_name}' existe y expone UserPoolId.")
 
 
+CONFIG_KEY = "bandeja-config.json"
+
+
+def abrir_lectura_publica_config(s3, bucket: str):
+    """El frontend lee bandeja-config.json desde el navegador sin credenciales
+    (lib/config-remota.ts), igual que el config.json de seguridad. Deja publico
+    SOLO esa key (el resto del bucket sigue privado) y habilita CORS de lectura.
+    Es idempotente. No tiene secretos: solo apiUrl y el nombre del bucket de PDFs."""
+    try:
+        s3.put_public_access_block(
+            Bucket=bucket,
+            PublicAccessBlockConfiguration={
+                "BlockPublicAcls": False,
+                "IgnorePublicAcls": False,
+                "BlockPublicPolicy": False,
+                "RestrictPublicBuckets": False,
+            },
+        )
+        s3.put_bucket_policy(
+            Bucket=bucket,
+            Policy=json.dumps({
+                "Version": "2012-10-17",
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": f"arn:aws:s3:::{bucket}/{CONFIG_KEY}",
+                }],
+            }),
+        )
+        s3.put_bucket_cors(
+            Bucket=bucket,
+            CORSConfiguration={"CORSRules": [{
+                "AllowedMethods": ["GET"],
+                "AllowedOrigins": ["*"],
+                "AllowedHeaders": ["*"],
+            }]},
+        )
+        print(f"OK: '{CONFIG_KEY}' de '{bucket}' queda de lectura publica (resto privado).")
+    except ClientError as e:
+        # No frena el deploy: la API funciona igual; solo el front no podria leer la config.
+        print(f"AVISO: no se pudo abrir la lectura publica de '{bucket}': {e}")
+
+
 def asegurar_bucket_config(stage: str):
     bucket = f"{CONFIG_BUCKET_PREFIX}-{stage}"
     s3 = boto3.client("s3", region_name=REGION)
+    existe = True
     try:
         s3.head_bucket(Bucket=bucket)
         print(f"OK: el bucket de config '{bucket}' ya existe.")
-        return
     except ClientError as e:
         codigo = e.response["Error"]["Code"]
         if codigo not in ("404", "NoSuchBucket"):
             raise
+        existe = False
 
-    print(f"El bucket de config '{bucket}' no existe, lo creo...")
-    # us-east-1 es un caso especial en la API de S3: no acepta
-    # CreateBucketConfiguration (a diferencia del resto de regiones).
-    if REGION == "us-east-1":
-        s3.create_bucket(Bucket=bucket)
-    else:
-        s3.create_bucket(
-            Bucket=bucket,
-            CreateBucketConfiguration={"LocationConstraint": REGION},
-        )
-    print(f"OK: bucket '{bucket}' creado.")
+    if not existe:
+        print(f"El bucket de config '{bucket}' no existe, lo creo...")
+        # us-east-1 es un caso especial en la API de S3: no acepta
+        # CreateBucketConfiguration (a diferencia del resto de regiones).
+        if REGION == "us-east-1":
+            s3.create_bucket(Bucket=bucket)
+        else:
+            s3.create_bucket(
+                Bucket=bucket,
+                CreateBucketConfiguration={"LocationConstraint": REGION},
+            )
+        print(f"OK: bucket '{bucket}' creado.")
+
+    abrir_lectura_publica_config(s3, bucket)
 
 
 def main():
