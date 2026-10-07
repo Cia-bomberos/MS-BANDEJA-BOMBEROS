@@ -6,5 +6,12 @@ coverage.xml
 .venv/
 venv/
 .env
+.env.*
 .sonar/
 node_modules/
+.serverless/
+
+# Credenciales de Google Drive: NUNCA al repo
+google-oauth.json
+client_secret*.json
+*.pem
