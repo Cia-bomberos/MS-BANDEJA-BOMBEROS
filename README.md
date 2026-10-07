@@ -100,24 +100,62 @@ secciones; Jefe_Administracion lee todas pero solo escribe Administración (y
 es el único que puede eliminar documentos archivados); cada otro Jefe de
 Sección solo lee/escribe su propia sección.
 
-### Pendiente — no incluido en esta primera versión
+### Respaldo en Google Drive (RN-0027 / RF-0009)
 
-1. **Integración real con Google Drive (RN-0027/RF-0009).** No existe todavía
-   una cuenta de servicio de Google Cloud ni el ID de la carpeta de la
-   Compañía. `modulo_documentos/scheduled.py::_subir_a_drive` es un stub que
-   **nunca marca `confirmado_drive = true`** (por diseño: mejor que el job se
-   reintente solo en la próxima corrida a que falsee una subida que no pasó).
-   Hasta que esto se implemente, ningún documento "Archivado" va a poder
-   eliminarse (RN-0028 lo exige explícitamente).
-2. ~~Lambda Layer para `psycopg2`~~ — **Resuelto** (ver sección "`psycopg2`
-   en Lambda" más arriba).
-3. **No hay tabla `usuarios` en el RDS.** El historial guarda `usuario_sub` /
+Al archivarse (3 días después de "Atendido"), el PDF se copia a una carpeta de
+Google Drive de la Compañía (`modulo_documentos/drive.py`, job `archivarDocumentos`).
+Solo cuando Drive confirma el archivo se marca `confirmado_drive = true`, que es
+la condición de RN-0028 para poder eliminar un documento.
+
+- Si Drive falla o no está configurado, el documento se archiva igual (RN-0026) con
+  `confirmado_drive = false`, y **cada corrida del job lo reintenta** hasta que Drive
+  lo confirme. Un reintento no duplica archivos (se busca por nombre antes de subir).
+- Nombre en Drive: el código único (`OFICIO N° 001-2026-...pdf`) o el id del documento.
+- Timeout de 20 s por llamada a Google (RNF-0009); el job no se cuelga por Drive.
+
+**Por qué OAuth y no cuenta de servicio.** La carpeta de respaldo está en un Gmail
+personal. Una cuenta de servicio no tiene almacenamiento propio y en "Mi unidad"
+falla con `storageQuotaExceeded`; con OAuth los archivos quedan a nombre de la
+persona que autorizó y cuentan para su espacio.
+
+**Configuración (una vez; la hace el dueño de la cuenta de Gmail)**
+
+1. Crear una carpeta en su Drive para los respaldos. Su ID es el último tramo de la
+   URL (`drive.google.com/drive/folders/<ID>`).
+2. En Google Cloud Console (misma cuenta): crear un proyecto, habilitar la
+   *Google Drive API*, configurar la pantalla de consentimiento (tipo Externo) y
+   crear un ID de cliente OAuth de tipo *Aplicación de escritorio*.
+   **Pasar el estado de publicación a "En producción"**: en modo "Prueba" Google
+   vence el token a los 7 días y el respaldo dejaría de funcionar sin avisar.
+   (La advertencia de "app no verificada" es normal en uso propio.)
+3. Correr `python scripts/obtener_token_drive.py --client-id <ID> --client-secret <SECRET>`
+   en su PC, autorizar en el navegador y guardar el JSON que imprime como
+   `google-oauth.json`.
+4. Subirlo al bucket privado (no al repo):
+   `aws s3 cp google-oauth.json s3://bomberos-documentos-<stage>/config/google-oauth.json`
+5. Desplegar con `DRIVE_FOLDER_ID=<ID de la carpeta>` (variable de entorno, o el
+   parámetro del Jenkinsfile del mismo nombre).
+
+Si el token se revoca o vence, el job registra el error en CloudWatch, no confirma
+nada y reintenta en cada corrida; basta repetir los pasos 3 y 4. Credenciales en S3
+y no en variables de entorno porque Lambda limita todas las variables a 4 KB.
+**Nunca commitear `google-oauth.json`.**
+
+### Tests
+
+111 tests, 95% de cobertura sobre `modulo_documentos/` (100% en `auth`, `codigo`,
+`prioridad`, `s3util`, `drive` y `scheduled`; ~92% en `handler`). La BD, S3 y Google Drive se
+mockean: los tests no tocan servicios reales. Ejecutar con
+`pytest tests/ --cov=modulo_documentos`.
+
+### Pendiente
+
+1. **Credenciales de Google Drive.** El código está implementado y probado con mocks,
+   pero falta que el dueño del Gmail genere las credenciales OAuth y entregue el ID de
+   carpeta (ver arriba); sin eso no se respalda nada y ningún archivado puede eliminarse (RN-0028). La subida
+   real contra Google no se ha podido probar de punta a punta.
+2. **No hay tabla `usuarios` en el RDS.** El historial guarda `usuario_sub` /
    `usuario_nombre` / `seccion` tal como vienen del token de Cognito
    (denormalizado), porque no existe ningún mecanismo que sincronice usuarios
-   de Cognito hacia RDS (seguridad tampoco lo tiene). Si en algún momento se
-   necesita hacer JOIN contra una tabla de usuarios real, hay que decidir
-   cómo sincronizarla primero.
-4. **Tests cubren el flujo principal, no cada combinación.** 42 tests, 100%
-   en `auth.py`/`codigo.py`/`prioridad.py` (la lógica pura), ~45% en
-   `handler.py` (los casos más importantes de cada endpoint). `scheduled.py`
-   no tiene tests todavía (requiere mockear más de la BD con fechas/intervalos).
+   de Cognito hacia RDS. Si se necesita hacer JOIN contra usuarios reales, hay
+   que decidir primero cómo sincronizarlos.

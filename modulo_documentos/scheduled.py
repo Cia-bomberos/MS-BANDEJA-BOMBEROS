@@ -6,6 +6,7 @@ No tienen event de API Gateway: se disparan por cron, no por HTTP.
 import logging
 from datetime import date
 
+from modulo_documentos import drive
 from modulo_documentos.db import get_connection
 from modulo_documentos.prioridad import reclasificar
 
@@ -42,44 +43,34 @@ def reclasificar_prioridades(event, context):
         conn.close()
 
 
-def _subir_a_drive(documento_id, archivo_s3_key) -> bool:
-    """TODO: integrar con la API de Google Drive (RN-0027/RF-0009) en cuanto
-    el equipo tenga la cuenta de servicio de Google Cloud y el ID de la
-    carpeta de la Compañía. Por ahora es un stub que NO confirma nada, para
-    que `confirmado_drive` nunca se marque en falso-positivo mientras esta
-    pieza no esté implementada de verdad.
-
-    Cuando se implemente: exportar/copiar el PDF desde
-    s3://<DOCUMENTS_BUCKET>/<archivo_s3_key> a la carpeta de Drive vía la
-    API, con manejo de errores/timeouts (RNF-0009) -- si falla, NO debe
-    marcarse confirmado_drive y el documento se reintenta en la siguiente
-    corrida de este job.
-    """
-    logger.warning(
-        "Subida a Google Drive no implementada todavía (documento %s, key %s). "
-        "Pendiente: cuenta de servicio de Google Cloud.",
-        documento_id, archivo_s3_key,
-    )
-    return False
+def _subir_a_drive(documento_id, codigo_unico, archivo_s3_key) -> bool:
+    """RN-0027 / RNF-0009: respalda el PDF en Google Drive. True solo si Drive lo
+    confirmó; si falla o no está configurado devuelve False y el documento se
+    reintenta en la siguiente corrida (ver `archivar_documentos`)."""
+    return drive.respaldar(documento_id, codigo_unico, archivo_s3_key)
 
 
 def archivar_documentos(event, context):
     """RN-0026: 'Atendido' -> 'Archivado' tras 3 días. RN-0027: al archivar,
-    exportar a Google Drive (ver limitación del stub arriba)."""
+    respalda en Google Drive. Si el respaldo falla, el documento se archiva
+    igual (RN-0026) pero queda con confirmado_drive = false y se reintenta en
+    cada corrida hasta que Drive lo confirme (RN-0028 exige esa confirmación
+    para poder eliminarlo)."""
     conn = get_connection()
     archivados = 0
+    reintentados = 0
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, archivo_s3_key FROM documentos
+                SELECT id, codigo_unico, archivo_s3_key FROM documentos
                 WHERE estado = 'Atendido' AND atendido_en <= now() - interval '3 days'
                 """
             )
-            documentos = cur.fetchall()
+            por_archivar = cur.fetchall()
 
-            for doc in documentos:
-                confirmado = _subir_a_drive(doc["id"], doc["archivo_s3_key"])
+            for doc in por_archivar:
+                confirmado = _subir_a_drive(doc["id"], doc["codigo_unico"], doc["archivo_s3_key"])
                 cur.execute(
                     """
                     UPDATE documentos
@@ -88,9 +79,26 @@ def archivar_documentos(event, context):
                     """,
                     (confirmado, doc["id"]),
                 )
+                conn.commit()  # por documento: un timeout no pierde lo ya procesado
                 archivados += 1
-        conn.commit()
-        logger.info("Archivado automático: %s documentos procesados.", archivados)
-        return {"archivados": archivados}
+
+            cur.execute(
+                """
+                SELECT id, codigo_unico, archivo_s3_key FROM documentos
+                WHERE estado = 'Archivado' AND confirmado_drive = false
+                """
+            )
+            pendientes = cur.fetchall()
+
+            for doc in pendientes:
+                if _subir_a_drive(doc["id"], doc["codigo_unico"], doc["archivo_s3_key"]):
+                    cur.execute(
+                        "UPDATE documentos SET confirmado_drive = true, fecha_actualizacion = now() WHERE id = %s",
+                        (doc["id"],),
+                    )
+                    conn.commit()
+                    reintentados += 1
+        logger.info("Archivado automático: %s archivados, %s respaldos pendientes confirmados.", archivados, reintentados)
+        return {"archivados": archivados, "respaldos_reintentados": reintentados}
     finally:
         conn.close()

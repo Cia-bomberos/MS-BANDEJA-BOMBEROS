@@ -51,6 +51,8 @@ provider:
     DB_USER: ${env:DB_USER}
     DB_PASSWORD: ${env:DB_PASSWORD}
     DOCUMENTS_BUCKET: !Ref DocumentsBucket
+    # Carpeta de Google Drive para el respaldo de archivados (RN-0027). Vacio = sin respaldo.
+    DRIVE_FOLDER_ID: ${env:DRIVE_FOLDER_ID, ''}
 
 functions:
   solicitarUrlSubida:
@@ -161,6 +163,9 @@ functions:
 
   archivarDocumentos:
     handler: modulo_documentos/scheduled.archivar_documentos
+    # Descarga cada PDF de S3 y lo sube a Drive: necesita mas margen que un endpoint.
+    timeout: 120
+    memorySize: 512
     events:
       - schedule: rate(1 hour)
 

@@ -20,6 +20,7 @@ pipeline {
         string(name: 'DB_NAME', defaultValue: '', description: 'Nombre de la BD del stage a desplegar (dev/qa/uat/prod)')
         string(name: 'DB_USER', defaultValue: '', description: 'Usuario de conexión al RDS')
         password(name: 'DB_PASSWORD', defaultValue: '', description: 'Password de conexión al RDS')
+        string(name: 'DRIVE_FOLDER_ID', defaultValue: '', description: 'ID de la carpeta de Google Drive para el respaldo de documentos archivados (vacío = sin respaldo)')
     }
 
     stages {
@@ -186,6 +187,7 @@ def executeServerlessDeploy(String targetStage) {
             "DB_NAME=${params.DB_NAME}",
             "DB_USER=${params.DB_USER}",
             "DB_PASSWORD=${params.DB_PASSWORD}",
+            "DRIVE_FOLDER_ID=${params.DRIVE_FOLDER_ID}",
             "NPM_CONFIG_PREFIX=${env.WORKSPACE}/.npm-global"
         ]) {
             sh """
