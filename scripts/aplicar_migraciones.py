@@ -20,9 +20,27 @@ import pathlib
 import sys
 
 import psycopg2
+from psycopg2 import sql
 
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / "migrations"
 
+def asegurar_base(host, port, dbname, user, password):
+    """Crea la base del stage si no existe (CREATE TABLE IF NOT EXISTS no crea bases).
+    Se conecta a la base de mantenimiento 'postgres' y requiere permiso CREATEDB."""
+    conn = psycopg2.connect(
+        host=host, port=port, dbname="postgres", user=user, password=password,
+        sslmode="require", connect_timeout=10,
+    )
+    conn.autocommit = True  # CREATE DATABASE no puede correr dentro de una transaccion
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
+            if cur.fetchone():
+                return
+            print(f"La base '{dbname}' no existe, la creo...")
+            cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
+    finally:
+        conn.close()
 
 def main():
     host = os.environ.get("DB_HOST", "").strip()
@@ -40,6 +58,8 @@ def main():
         print(f"No hay archivos .sql en {MIGRATIONS_DIR}")
         return
 
+    asegurar_base(host, port, dbname, user, password)
+    
     conn = psycopg2.connect(
         host=host, port=port, dbname=dbname, user=user, password=password,
         sslmode="require", connect_timeout=10,
