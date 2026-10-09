@@ -1,0 +1,8 @@
+{
+  "name": "ms-bandeja-bomberos",
+  "private": true,
+  "description": "Infra serverless del modulo de Bandeja Documental (Compania de Bomberos N3).",
+  "devDependencies": {
+    "serverless-python-requirements": "^6.1.1"
+  }
+}
