@@ -202,6 +202,17 @@ resources:
             - AllowedMethods: [GET, PUT]
               AllowedOrigins: ['*']
               AllowedHeaders: ['*']
+        # Las subidas llegan a "pendientes/" y solo pasan a "documentos/" cuando el
+        # backend valida el PDF al registrar. Lo que nunca se registra (o se rechaza)
+        # se borra solo a las 24 h, así el bucket no se llena de archivos huérfanos.
+        LifecycleConfiguration:
+          Rules:
+            - Id: expirar-subidas-pendientes
+              Status: Enabled
+              Prefix: pendientes/
+              ExpirationInDays: 1
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
 
   Outputs:
     DocumentsBucketName:

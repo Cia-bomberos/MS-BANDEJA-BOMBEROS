@@ -14,8 +14,10 @@ mismo Cognito User Pool que `MS-SEGURIDAD-BOMBEROS` para autenticación y roles.
   más una tabla auxiliar (`documento_correlativos`) para la numeración atómica.
   Ver `migrations/001_init.sql` — correr una vez por entorno (dev/qa/uat/prod)
   antes del primer deploy.
-- **Bucket S3 propio** (`bomberos-documentos-<stage>`) para los PDFs, privado,
-  acceso solo vía URLs pre-firmadas (subida y descarga).
+- **Bucket S3 propio** (`bomberos-documentos-<stage>-<id de cuenta>`) para los PDFs, privado,
+  acceso solo vía URLs pre-firmadas (subida y descarga). Las subidas entran a
+  `pendientes/` y solo pasan a `documentos/` cuando el backend valida el PDF al
+  registrar o reemplazar; `pendientes/` expira a las 24 h (ver "Reglas y decisiones").
 - **2 jobs programados** (cada 1h): reclasificación de prioridades (RN-0017) y
   archivado automático tras 3 días en "Atendido" (RN-0026).
 
@@ -66,15 +68,40 @@ Docker-in-Docker.
 
 Después de cada deploy, `scripts/publicar_config.py` lee el `ServiceEndpoint`
 del stack y lo sube a un bucket de config propio de bandeja
-(`bomberos-f3-bandeja-config-<stage>`), bajo la key `bandeja-config.json`.
+(`bomberos-f3-bandeja-cfg-<stage>`), bajo la key `bandeja-config.json`.
 
 **Aclaración sobre el bucket de config.** El bucket `bomberos-config-<stage>`
 es del PM y vive en SU cuenta de AWS (ahí seguridad publica su `config.json`).
 Desde una cuenta distinta recibe 403 al escribir, así que bandeja publica en un
-bucket propio (`bomberos-f3-bandeja-config-<stage>`) con lectura pública solo
+bucket propio (`bomberos-f3-bandeja-cfg-<stage>`) con lectura pública solo
 para `bandeja-config.json`. Si se quiere unificar, el PM puede dar permiso de
 `s3:PutObject` sobre esa key a la cuenta que despliega, o el deploy puede correr
 desde su cuenta (Jenkins) y escribir ahí directamente.
+
+### Reglas y decisiones (correcciones de QA)
+
+- **Fecha de Lima.** Todo cálculo de "hoy" (días restantes, prioridad, `vencido`, año del
+  código único, job de reclasificación) usa `America/Lima` (`modulo_documentos/tiempo.py`),
+  no el UTC de Lambda. Entre las 19:00 y las 24:00 el servidor ya está en el día siguiente.
+- **Prioridad congelada (RN-0023, CU-006).** `PATCH /documentos/{id}/prioridad` solo
+  funciona en estado `Pendiente`; en cualquier otro responde 409.
+- **Historial de reclasificación (RN-0014, CU-006).** El job registra cada cambio
+  automático con `accion = reclasificacion_automatica`, autor `sistema` y el motivo.
+- **Sección de origen en solo lectura (RN-0021, CU-008).** La sección que registró o
+  derivó un documento sigue viéndolo (lista, detalle, descarga) pero no puede
+  modificarlo. Se deduce del historial, sin columnas nuevas. Las respuestas traen
+  `solo_lectura: true|false`.
+- **Envío externo (RN-0026, RN-0027, CU-010).** Exige haber descargado el documento
+  antes (cada `GET .../descargar` queda en el historial como `descarga`, y se valida por
+  usuario); si no, 409. Body: `medio` y `destinatario` (obligatorios), `fecha_envio`
+  (`YYYY-MM-DD`) y `hora_envio` (`HH:MM`) opcionales (por defecto, ahora en Lima). Todo
+  queda en el detalle del historial.
+- **Archivos en S3 (RNF-0006/0007).** `POST /documentos/upload-url` acepta
+  `tamano_bytes`; si se envía, el tamaño queda firmado en la URL y S3 rechaza otro
+  Content-Length (máx. 20 MB). Si el PDF no es válido, el backend lo borra; al
+  reemplazar un adjunto se borra el anterior; y `pendientes/` expira a las 24 h.
+  Pendiente (requiere cambio en el front): un tope de tamaño obligatorio para quien use la
+  API directamente exige cambiar la subida a *presigned POST* con `content-length-range`.
 
 ### Endpoints
 
@@ -83,7 +110,7 @@ superficie elegida:
 
 | Método | Ruta | RN/RF relevantes |
 |---|---|---|
-| POST | `/documentos/upload-url` | RNF-0006 (URL pre-firmada para subir el PDF) |
+| POST | `/documentos/upload-url` | RNF-0006 (URL pre-firmada; `tamano_bytes` opcional) |
 | POST | `/documentos` | RN-0007, 0013, 0014, 0020, 0024, 0025 / RF-0004, 0008 |
 | GET | `/documentos` | RN-0004, 0005, 0006, 0019 / RF-0002 |
 | GET | `/documentos/{id}` | RN-0006, 0012 / RF-0003 |
@@ -132,7 +159,7 @@ persona que autorizó y cuentan para su espacio.
    en su PC, autorizar en el navegador y guardar el JSON que imprime como
    `google-oauth.json`.
 4. Subirlo al bucket privado (no al repo):
-   `aws s3 cp google-oauth.json s3://bomberos-documentos-<stage>/config/google-oauth.json`
+   `aws s3 cp google-oauth.json s3://bomberos-documentos-<stage>-<id de cuenta>/config/google-oauth.json`
 5. Desplegar con `DRIVE_FOLDER_ID=<ID de la carpeta>` (variable de entorno, o el
    parámetro del Jenkinsfile del mismo nombre).
 
@@ -143,8 +170,8 @@ y no en variables de entorno porque Lambda limita todas las variables a 4 KB.
 
 ### Tests
 
-111 tests, 95% de cobertura sobre `modulo_documentos/` (100% en `auth`, `codigo`,
-`prioridad`, `s3util`, `drive` y `scheduled`; ~92% en `handler`). La BD, S3 y Google Drive se
+156 tests, 97% de cobertura sobre `modulo_documentos/` (100% en `auth`, `codigo`,
+`prioridad`, `s3util`, `drive` y `scheduled`; ~97% en `handler`). La BD, S3 y Google Drive se
 mockean: los tests no tocan servicios reales. Ejecutar con
 `pytest tests/ --cov=modulo_documentos`.
 

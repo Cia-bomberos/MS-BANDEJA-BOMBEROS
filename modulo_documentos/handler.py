@@ -21,6 +21,7 @@ from modulo_documentos import auth, s3util
 from modulo_documentos.codigo import formatear_codigo
 from modulo_documentos.db import get_connection, siguiente_correlativo
 from modulo_documentos.prioridad import calcular_prioridad
+from modulo_documentos.tiempo import ahora_lima, hoy_lima
 
 ESTADOS_VALIDOS = {"Pendiente", "En proceso", "Atendido", "Archivado"}
 PRIORIDADES_VALIDAS = {"Alta", "Media", "Baja"}
@@ -57,12 +58,41 @@ def _obtener_seccion_doc(cur, documento_id) -> str | None:
     return row["seccion_responsable"] if row else None
 
 
+def _seccion_participo(cur, documento_id, seccion: str) -> bool:
+    """True si la sección actuó alguna vez sobre el documento (lo registró o lo
+    derivó). Sale del historial: no necesita columnas nuevas."""
+    cur.execute(
+        "SELECT 1 FROM historial_acciones WHERE documento_id = %s AND seccion = %s LIMIT 1",
+        (documento_id, seccion),
+    )
+    return cur.fetchone() is not None
+
+
+def _puede_consultar(cur, event, documento_id, seccion_doc: str) -> bool:
+    """RN-0021 / CU-008: además de quien tiene acceso por su rol o sección, la
+    sección que registró o derivó el documento conserva su consulta (solo lectura)
+    para hacerle seguimiento aunque ya no sea la responsable."""
+    if auth.puede_leer(event, seccion_doc):
+        return True
+    seccion = auth.seccion_usuario(event)
+    return bool(seccion) and _seccion_participo(cur, documento_id, seccion)
+
+
 # ---------------------------------------------------------------------------
 # POST /documentos/upload-url
 # ---------------------------------------------------------------------------
 
 def solicitar_url_subida(event, context):
-    return _respuesta(200, s3util.generar_url_subida())
+    body = json.loads(event.get("body") or "{}")
+    # Opcional: si el cliente informa el tamaño, se firma en la URL de subida
+    # y S3 rechaza cualquier archivo de otro tamaño.
+    tamano = body.get("tamano_bytes")
+    if tamano is not None:
+        if isinstance(tamano, bool) or not isinstance(tamano, int) or tamano <= 0:
+            return _respuesta(400, {"error": "tamano_bytes debe ser un entero positivo."})
+        if tamano > s3util.MAX_BYTES:
+            return _respuesta(400, {"error": "El archivo excede 20MB (RNF-0006)."})
+    return _respuesta(200, s3util.generar_url_subida(tamano_bytes=tamano))
 
 
 # ---------------------------------------------------------------------------
@@ -90,9 +120,6 @@ def crear_documento(event, context):
     if not archivo_s3_key or not fecha_limite_str:
         return _respuesta(400, {"error": "archivo_s3_key y fecha_limite son obligatorios."})
 
-    if not s3util.validar_pdf(archivo_s3_key):
-        return _respuesta(400, {"error": "El archivo no es un PDF válido o excede 20MB (RNF-0006/0007)."})
-
     try:
         fecha_limite = date.fromisoformat(fecha_limite_str)
     except ValueError:
@@ -106,6 +133,12 @@ def crear_documento(event, context):
     if modalidad == "simplificado":
         tipo = None
 
+    # RNF-0006/0007: recién ahora se valida el archivo subido; si no es un PDF de
+    # hasta 20MB se elimina de S3 y se rechaza el registro.
+    archivo_s3_key = s3util.promover_pdf(archivo_s3_key)
+    if not archivo_s3_key:
+        return _respuesta(400, {"error": "El archivo no es un PDF válido o excede 20MB (RNF-0006/0007)."})
+
     prioridad_manual = prioridad_body in PRIORIDADES_VALIDAS
     prioridad = prioridad_body if prioridad_manual else calcular_prioridad(fecha_limite)
 
@@ -113,7 +146,7 @@ def crear_documento(event, context):
     try:
         codigo_unico = None
         if modalidad == "completo":
-            anio = date.today().year
+            anio = hoy_lima().year  # año de Lima, no el UTC del servidor
             numero = siguiente_correlativo(conn, tipo, anio)
             codigo_unico = formatear_codigo(tipo, numero, anio)
 
@@ -133,6 +166,7 @@ def crear_documento(event, context):
         return _respuesta(201, doc)
     except Exception as e:
         conn.rollback()
+        s3util.eliminar(archivo_s3_key)  # el registro no se creó: no dejar el PDF huérfano
         return _respuesta(500, {"error": str(e)})
     finally:
         conn.close()
@@ -143,7 +177,7 @@ def crear_documento(event, context):
 # ---------------------------------------------------------------------------
 
 def listar_documentos(event, context):
-    """RN-0004, RN-0005, RN-0006, RN-0019, RF-0002."""
+    """RN-0004, RN-0005, RN-0006, RN-0019, RF-0002, RN-0021."""
     g = auth.grupo(event)
     params = event.get("queryStringParameters") or {}
     estado_filtro = params.get("estado")
@@ -160,21 +194,28 @@ def listar_documentos(event, context):
                 seccion = auth.seccion_usuario(event)
                 if not seccion:
                     return _respuesta(403, {"error": "Rol no autorizado."})
+                # Su sección ve lo que tiene a su cargo y, en solo lectura, lo que
+                # registró o derivó (RN-0021).
+                filtro_seccion = (
+                    "(seccion_responsable = %s OR EXISTS ("
+                    "SELECT 1 FROM historial_acciones h WHERE h.documento_id = documentos.id AND h.seccion = %s))"
+                )
                 if estado_filtro:
                     cur.execute(
-                        "SELECT * FROM documentos WHERE seccion_responsable = %s AND estado = %s ORDER BY fecha_creacion DESC",
-                        (seccion, estado_filtro),
+                        f"SELECT * FROM documentos WHERE {filtro_seccion} AND estado = %s ORDER BY fecha_creacion DESC",
+                        (seccion, seccion, estado_filtro),
                     )
                 else:
                     cur.execute(
-                        "SELECT * FROM documentos WHERE seccion_responsable = %s ORDER BY fecha_creacion DESC",
-                        (seccion,),
+                        f"SELECT * FROM documentos WHERE {filtro_seccion} ORDER BY fecha_creacion DESC",
+                        (seccion, seccion),
                     )
             documentos = cur.fetchall()
 
-        hoy = date.today()
+        hoy = hoy_lima()
         for doc in documentos:
             doc["vencido"] = doc["fecha_limite"] < hoy  # RN-0019
+            doc["solo_lectura"] = not auth.puede_escribir(event, doc["seccion_responsable"])
 
         return _respuesta(200, {"documentos": documentos})
     finally:
@@ -197,7 +238,7 @@ def obtener_documento(event, context):
             if not doc:
                 return _respuesta(404, {"error": "Documento no encontrado."})
 
-            if not auth.puede_leer(event, doc["seccion_responsable"]):
+            if not _puede_consultar(cur, event, documento_id, doc["seccion_responsable"]):
                 return _respuesta(403, {"error": "No tiene acceso a esta sección."})
 
             cur.execute(
@@ -205,7 +246,8 @@ def obtener_documento(event, context):
                 (documento_id,),
             )
             doc["historial"] = cur.fetchall()
-            doc["vencido"] = doc["fecha_limite"] < date.today()
+            doc["vencido"] = doc["fecha_limite"] < hoy_lima()
+            doc["solo_lectura"] = not auth.puede_escribir(event, doc["seccion_responsable"])
 
         return _respuesta(200, doc)
     finally:
@@ -264,20 +306,23 @@ def derivar_documento(event, context):
 
 def actualizar_archivo(event, context):
     """RN-0010: solo la sección responsable actual puede reemplazar el
-    adjunto mientras el documento esté 'En proceso'."""
+    adjunto mientras el documento esté 'En proceso'. El archivo anterior se
+    elimina de S3 una vez confirmado el reemplazo."""
     documento_id = event["pathParameters"]["id"]
     body = json.loads(event.get("body") or "{}")
     nuevo_s3_key = body.get("archivo_s3_key")
 
     if not nuevo_s3_key:
         return _respuesta(400, {"error": "archivo_s3_key es obligatorio."})
-    if not s3util.validar_pdf(nuevo_s3_key):
-        return _respuesta(400, {"error": "El archivo no es un PDF válido o excede 20MB."})
 
     conn = get_connection()
+    definitiva = None
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
+            cur.execute(
+                "SELECT seccion_responsable, estado, archivo_s3_key FROM documentos WHERE id = %s",
+                (documento_id,),
+            )
             doc = cur.fetchone()
             if not doc:
                 return _respuesta(404, {"error": "Documento no encontrado."})
@@ -286,15 +331,24 @@ def actualizar_archivo(event, context):
             if not auth.puede_escribir(event, doc["seccion_responsable"]):
                 return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
 
+            definitiva = s3util.promover_pdf(nuevo_s3_key)
+            if not definitiva:
+                return _respuesta(400, {"error": "El archivo no es un PDF válido o excede 20MB."})
+
             cur.execute(
                 "UPDATE documentos SET archivo_s3_key = %s, fecha_actualizacion = now() WHERE id = %s",
-                (nuevo_s3_key, documento_id),
+                (definitiva, documento_id),
             )
             _registrar_historial(cur, documento_id, event, "actualizacion_archivo", "Archivo adjunto reemplazado.")
         conn.commit()
+        anterior = doc.get("archivo_s3_key")
+        if anterior and anterior != definitiva:
+            s3util.eliminar(anterior)  # la versión reemplazada ya no se usa
         return _respuesta(200, {"mensaje": "Archivo actualizado."})
     except Exception as e:
         conn.rollback()
+        if definitiva:
+            s3util.eliminar(definitiva)
         return _respuesta(500, {"error": str(e)})
     finally:
         conn.close()
@@ -340,7 +394,7 @@ def marcar_atendido(event, context):
 # ---------------------------------------------------------------------------
 
 def asignar_prioridad(event, context):
-    """RN-0018, RF-0005: asignación manual de prioridad y/o fecha límite."""
+    """RN-0018, RF-0005: asignación manual de prioridad y/o fecha límite (solo en Pendiente)."""
     documento_id = event["pathParameters"]["id"]
     body = json.loads(event.get("body") or "{}")
     prioridad = body.get("prioridad")
@@ -352,12 +406,16 @@ def asignar_prioridad(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable FROM documentos WHERE id = %s", (documento_id,))
+            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
             doc = cur.fetchone()
             if not doc:
                 return _respuesta(404, {"error": "Documento no encontrado."})
             if not auth.puede_escribir(event, doc["seccion_responsable"]):
                 return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+            # RN-0023 / CU-006: la prioridad solo se asigna en 'Pendiente'; desde
+            # 'En proceso' queda congelada.
+            if doc["estado"] != "Pendiente":
+                return _respuesta(409, {"error": "La prioridad solo puede asignarse mientras el documento está Pendiente."})
 
             campos, valores = [], []
             if prioridad is not None:
@@ -390,10 +448,41 @@ def asignar_prioridad(event, context):
 # POST /documentos/{id}/envio-externo
 # ---------------------------------------------------------------------------
 
+def _parsear_envio(body: dict):
+    """Datos del envío que indica el usuario (CU-010, RN-0026): medio, destinatario,
+    fecha y hora. Devuelve (datos, None) o (None, mensaje_de_error). Si no se indican
+    fecha/hora se usa el momento actual de Lima."""
+    medio = str(body.get("medio") or "").strip()
+    destinatario = str(body.get("destinatario") or "").strip()
+    
+    if not medio or not destinatario:
+        return None, "medio y destinatario son obligatorios."
+
+    ahora = ahora_lima()
+    fecha_txt = body.get("fecha_envio") or body.get("fecha")
+    hora_txt = body.get("hora_envio") or body.get("hora")
+    try:
+        fecha = date.fromisoformat(fecha_txt) if fecha_txt else ahora.date()
+    except (TypeError, ValueError):
+        return None, "fecha_envio debe tener formato YYYY-MM-DD."
+    try:
+        hora = datetime.strptime(str(hora_txt)[:5], "%H:%M").time() if hora_txt else ahora.time().replace(second=0, microsecond=0)
+    except ValueError:
+        return None, "hora_envio debe tener formato HH:MM."
+    return {"medio": medio, "destinatario": destinatario, "fecha": fecha, "hora": hora}, None
+
+
 def registrar_envio_externo(event, context):
     """RN-0021, RN-0022, RF-0007: registra el envío manual a una entidad
-    externa y cierra automáticamente la gestión como 'Atendido'."""
+    externa y cierra automáticamente la gestión como 'Atendido'. Exige que el
+    usuario haya descargado antes el documento (RN-0027 / CU-010) y conserva
+    medio, destinatario, fecha y hora del envío (RN-0026)."""
     documento_id = event["pathParameters"]["id"]
+    body = json.loads(event.get("body") or "{}")
+
+    envio, error = _parsear_envio(body)
+    if error:
+        return _respuesta(400, {"error": error})
 
     conn = get_connection()
     try:
@@ -408,10 +497,27 @@ def registrar_envio_externo(event, context):
                 return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
 
             cur.execute(
+                "SELECT 1 FROM historial_acciones WHERE documento_id = %s AND accion = 'descarga' AND usuario_sub = %s LIMIT 1",
+                (documento_id, auth.usuario_sub(event)),
+            )
+            if cur.fetchone() is None:
+                return _respuesta(409, {"error": "Debe descargar el documento antes de registrar su envío externo."})
+
+            cur.execute(
                 "UPDATE documentos SET estado = 'Atendido', atendido_en = now(), fecha_actualizacion = now() WHERE id = %s",
                 (documento_id,),
             )
-            _registrar_historial(cur, documento_id, event, "envio_externo", "Envío externo registrado; documento Atendido.")
+
+            detalle = (
+                f"Envio externo registrado. Medio: {envio['medio']}. " 
+                f"Destinatario: {envio['destinatario']}. "
+                f"Enviado el {envio['fecha']:%d/%m/%Y} a las {envio['hora']:%H:%M}."
+                "Documento atendido"
+            )
+
+            _registrar_historial(
+                cur, documento_id, event, "envio_externo", detalle
+            )
         conn.commit()
         return _respuesta(200, {"mensaje": "Envío externo registrado. Documento marcado como Atendido."})
     except Exception as e:
@@ -436,8 +542,12 @@ def descargar_documento(event, context):
             doc = cur.fetchone()
             if not doc:
                 return _respuesta(404, {"error": "Documento no encontrado."})
-            if not auth.puede_leer(event, doc["seccion_responsable"]):
+            if not _puede_consultar(cur, event, documento_id, doc["seccion_responsable"]):
                 return _respuesta(403, {"error": "No tiene acceso a esta sección."})
+
+            # RN-0027: la descarga queda registrada; es el requisito previo del envío externo.
+            _registrar_historial(cur, documento_id, event, "descarga", "Documento descargado.")
+        conn.commit()
 
         url = s3util.generar_url_descarga(doc["archivo_s3_key"])
         return _respuesta(200, {"downloadUrl": url})
