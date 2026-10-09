@@ -1,0 +1,98 @@
+name: Deploy Serverless
+
+on:
+  push:
+    branches:
+      - development
+      - qa
+      - uat
+      - main
+
+# Evita que dos deploys a la misma branch corran en paralelo
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: '5432'
+      # La BD cambia por stage: se elige el secret segun la branch
+      DB_NAME: >-
+        ${{ github.ref_name == 'main' && secrets.DB_NAME_PROD
+         || github.ref_name == 'uat'  && secrets.DB_NAME_UAT
+         || github.ref_name == 'qa'   && secrets.DB_NAME_QA
+         || secrets.DB_NAME_DEV }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determinar stage según la branch
+        id: vars
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            development) STAGE=dev ;;
+            qa)          STAGE=qa ;;
+            uat)         STAGE=uat ;;
+            main)        STAGE=prod ;;
+            *)           STAGE=dev ;;
+          esac
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+
+      # 3.11 = runtime de la Lambda (serverless.yml). serverless-python-requirements
+      # usa el pip del runner (dockerizePip: non-linux), asi que la version importa.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Set up Node (para Serverless Framework)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Tests
+        run: |
+          pip install -r requirements-dev.txt
+          pytest tests/ --cov=modulo_documentos --cov-report=term
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Aplicar migraciones (RDS)
+        if: env.DB_HOST != ''
+        run: python scripts/aplicar_migraciones.py
+
+      - name: Verificar MS-SEGURIDAD-BOMBEROS / bucket de config
+        run: python scripts/verificar_dependencias.py --stage ${{ env.STAGE }}
+
+      - name: Resolver User Pool del authorizer
+        run: |
+          USER_POOL_ARN=$(python scripts/resolver_user_pool.py --stage ${{ env.STAGE }})
+          echo "User Pool del authorizer: $USER_POOL_ARN"
+          echo "USER_POOL_ARN=$USER_POOL_ARN" >> "$GITHUB_ENV"
+
+      - name: Instalar Serverless Framework y dependencias
+        run: |
+          npm install -g serverless@3
+          npm install
+
+      - name: Deploy
+        run: serverless deploy --stage ${{ env.STAGE }} --verbose
+
+      - name: Publicar config (apiUrl) a S3
+        run: python scripts/publicar_config.py --stage ${{ env.STAGE }}
