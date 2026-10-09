@@ -82,7 +82,8 @@ class TestSolicitarUrlSubida:
 
         monkeypatch.setattr(handler.s3util, "generar_url_subida", falso)
         resp = handler.solicitar_url_subida(_event("Jefe_Sanidad", body={"tamano_bytes": 1234}), None)
-        assert resp["statusCode"] == 200 and recibido["tamano"] == 1234
+        assert resp["statusCode"] == 200
+        assert recibido["tamano"] == 1234
 
     @pytest.mark.parametrize("tamano", [0, -5, "grande", True, 1.5])
     def test_tamano_invalido(self, tamano):
@@ -377,7 +378,8 @@ class TestDescargar:
         resp = handler.descargar_documento(_event("Jefe_Maquinas", ID), None)
         assert json.loads(resp["body"]) == {"downloadUrl": "https://s3/k"}
         historial = [c for c in cur.execute.call_args_list if "INSERT INTO historial_acciones" in c.args[0]]
-        assert len(historial) == 1 and historial[0].args[1][4] == "descarga"
+        assert len(historial) == 1
+        assert historial[0].args[1][4] == "descarga"
         conn.commit.assert_called_once()
 
     def test_la_seccion_de_origen_puede_descargar_en_solo_lectura(self, conn_mock, monkeypatch):

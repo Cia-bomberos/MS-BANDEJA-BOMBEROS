@@ -63,7 +63,9 @@ class TestReclasificarPrioridades:
         assert len(insert) == 1
         doc_id, sub, nombre, seccion, accion, detalle = insert[0].args[1]
         assert (doc_id, sub, accion) == ("a", "sistema", "reclasificacion_automatica")
-        assert "Baja" in detalle and "Alta" in detalle and "5 día" in detalle
+        assert "Baja" in detalle
+        assert "Alta" in detalle
+        assert "5 día" in detalle
 
     def test_sin_cambios_no_escribe_historial(self, conn_mock):
         _, cursor = conn_mock
