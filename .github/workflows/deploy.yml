@@ -72,15 +72,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
-      - name: Diagnostico de cuenta AWS
-        run: |
-          aws sts get-caller-identity
-          echo "--- buckets bomberos en esta cuenta ---"
-          aws s3api list-buckets --query "Buckets[?starts_with(Name,'bomberos')].Name" --output text || true
-          echo "--- head-bucket con owner esperado ---"
-          aws s3api head-bucket --bucket bomberos-config-dev --expected-bucket-owner 593470088348 || true
-          echo "--- stack de seguridad ---"
-          aws cloudformation describe-stacks --stack-name bomberos-f3-backend-dev --query "Stacks[0].StackStatus" --output text || true
 
       - name: Aplicar migraciones (RDS)
         if: env.DB_HOST != ''

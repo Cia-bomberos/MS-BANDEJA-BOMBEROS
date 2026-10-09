@@ -189,7 +189,7 @@ resources:
     DocumentsBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: bomberos-documentos-${sls:stage}
+        BucketName: bomberos-documentos-${sls:stage}-${aws:accountId}
         # Privado: se accede solo vía URLs pre-firmadas (subida y descarga).
         PublicAccessBlockConfiguration:
           BlockPublicAcls: true
