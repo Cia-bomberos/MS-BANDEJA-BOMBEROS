@@ -126,5 +126,5 @@ def respaldar(documento_id, codigo_unico, archivo_s3_key, s3=None) -> bool:
         logger.info("Drive: documento %s respaldado (%s).", documento_id, file_id)
         return True
     except Exception as e:  # noqa: BLE001 -- el job debe seguir con el resto
-        logger.error("Drive: falló el respaldo del documento %s: %s", documento_id, e)
+        logger.exception("Drive: falló el respaldo del documento %s: %s", documento_id, e)
         return False

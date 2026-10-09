@@ -19,16 +19,18 @@ s3 = boto3.client("s3")
 def _bucket() -> str:
     return os.environ["DOCUMENTS_BUCKET"]
 
+def _owner() -> str:
+    return os.environ["DOCUMENTS_BUCKET_OWNER"]
 
-def generar_key(nombre_original: str) -> str:
+def generar_key() -> str:
     extension = ".pdf"
     return f"documentos/{uuid.uuid4()}{extension}"
 
 
-def generar_url_subida(nombre_original: str, expira_segundos: int = 300) -> dict:
+def generar_url_subida(expira_segundos: int = 300) -> dict:
     """URL pre-firmada para que el cliente suba el PDF directo a S3 (evita el
     límite de payload de API Gateway/Lambda para archivos de hasta 20MB)."""
-    key = generar_key(nombre_original)
+    key = generar_key()
     url = s3.generate_presigned_url(
         "put_object",
         Params={
@@ -53,13 +55,22 @@ def generar_url_descarga(key: str, expira_segundos: int = 300) -> str:
 def validar_pdf(key: str) -> bool:
     """Verifica tamaño (<=20MB) y que el contenido real sea un PDF (firma %PDF-)."""
     try:
-        head = s3.head_object(Bucket=_bucket(), Key=key)
+        head = s3.head_object(
+            Bucket=_bucket(),
+            Key=key,
+            ExpectedBucketOwner=_owner(),
+        )
     except s3.exceptions.ClientError:
         return False
 
     if head["ContentLength"] > MAX_BYTES:
         return False
 
-    inicio = s3.get_object(Bucket=_bucket(), Key=key, Range="bytes=0-4")
+    inicio = s3.get_object(
+        Bucket=_bucket(),
+        Key=key,
+        Range="bytes=0-4",
+        ExpectedBucketOwner=_owner(),
+    )
     firma = inicio["Body"].read()
     return firma.startswith(PDF_MAGIC)

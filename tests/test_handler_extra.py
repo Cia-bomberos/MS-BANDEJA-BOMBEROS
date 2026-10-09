@@ -99,7 +99,8 @@ class TestListarConFiltro:
         resp = handler.listar_documentos(_event("Jefatura", query={"estado": "Pendiente"}), None)
         assert resp["statusCode"] == 200
         sql, params = cur.execute.call_args.args
-        assert "estado = %s" in sql and params == ("Pendiente",)
+        assert "estado = %s" in sql
+        assert params == ("Pendiente",)
 
 
 # ---------------------------------------------------------------------------
