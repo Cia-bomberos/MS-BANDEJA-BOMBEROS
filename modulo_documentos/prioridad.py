@@ -7,6 +7,8 @@ triviales de testear.
 
 from datetime import date
 
+from modulo_documentos.tiempo import hoy_lima
+
 ALTA = "Alta"
 MEDIA = "Media"
 BAJA = "Baja"
@@ -16,7 +18,7 @@ UMBRAL_MEDIA_DIAS = 30  # 10-30 días -> Media; > 30 -> Baja
 
 
 def dias_restantes(fecha_limite: date, hoy: date | None = None) -> int:
-    hoy = hoy or date.today()
+    hoy = hoy or hoy_lima()  # día de Lima, no el UTC del servidor
     return (fecha_limite - hoy).days
 
 

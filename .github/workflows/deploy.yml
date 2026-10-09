@@ -96,3 +96,21 @@ jobs:
 
       - name: Publicar config (apiUrl) a S3
         run: python scripts/publicar_config.py --stage ${{ env.STAGE }}
+
+      - name: Subir credenciales de Google Drive a S3
+        env:
+          GOOGLE_OAUTH_JSON: ${{ secrets.GOOGLE_OAUTH_JSON }}
+        run: |
+          if [ -z "$GOOGLE_OAUTH_JSON" ]; then
+            echo "::warning::GOOGLE_OAUTH_JSON no esta definido; se omite la subida."
+            exit 0
+          fi
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name bomberos-f3-bandeja-${{ env.STAGE }} \
+            --query "Stacks[0].Outputs[?OutputKey=='DocumentsBucketName'].OutputValue" \
+            --output text)
+          printf '%s' "$GOOGLE_OAUTH_JSON" > "$RUNNER_TEMP/google-oauth.json"
+          aws s3 cp "$RUNNER_TEMP/google-oauth.json" \
+            "s3://$BUCKET/config/google-oauth.json" \
+            --content-type application/json
+          rm -f "$RUNNER_TEMP/google-oauth.json"
