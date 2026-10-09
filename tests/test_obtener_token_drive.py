@@ -13,7 +13,8 @@ _SPEC.loader.exec_module(otd)
 def test_url_pide_acceso_offline_y_scope_drive():
     q = parse_qs(urlparse(otd.url_autorizacion("cid", "estado-1")).query)
     assert q["client_id"] == ["cid"]
-    assert q["access_type"] == ["offline"] and q["prompt"] == ["consent"]
+    assert q["access_type"] == ["offline"] 
+    assert q["prompt"] == ["consent"]
     assert q["scope"] == ["https://www.googleapis.com/auth/drive"]
     assert q["state"] == ["estado-1"]
     assert q["redirect_uri"][0].startswith("http://127.0.0.1:")
@@ -39,4 +40,5 @@ def test_canjear_codigo_envia_los_datos_correctos(monkeypatch):
     monkeypatch.setattr(otd.urllib.request, "urlopen", _open)
     assert otd.canjear_codigo("cid", "sec", "codigo-1")["refresh_token"] == "r"
     assert visto["url"] == otd.TOKEN_URL
-    assert visto["body"]["grant_type"] == ["authorization_code"] and visto["body"]["code"] == ["codigo-1"]
+    assert visto["body"]["grant_type"] == ["authorization_code"]
+    assert visto["body"]["code"] == ["codigo-1"]

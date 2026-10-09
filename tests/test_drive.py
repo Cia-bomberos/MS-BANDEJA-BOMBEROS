@@ -96,8 +96,9 @@ class TestToken:
 
     def test_token_revocado_se_propaga(self, monkeypatch):
         monkeypatch.setattr(drive.requests, "post", lambda *a, **k: _resp(status=400))
+        s3 = self._s3({"client_id": "a", "client_secret": "b", "refresh_token": "c"})
         with pytest.raises(RuntimeError):
-            drive._token(self._s3({"client_id": "a", "client_secret": "b", "refresh_token": "c"}))
+            drive._token(s3)
 
 
 class TestRespaldar:

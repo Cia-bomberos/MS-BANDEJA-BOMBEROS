@@ -18,13 +18,16 @@ def s3_mock(monkeypatch):
 
 def test_generar_key_siempre_termina_en_pdf_y_es_unica():
     a, b = s3util.generar_key("../../evil.exe"), s3util.generar_key("x.pdf")
-    assert a.startswith("documentos/") and a.endswith(".pdf") and a != b
+    assert a.startswith("documentos/") 
+    assert a.endswith(".pdf")
+    assert a != b
 
 
 def test_url_de_subida_exige_content_type_pdf(s3_mock):
     s3_mock.generate_presigned_url.return_value = "https://s3/firmada"
     r = s3util.generar_url_subida("a.pdf")
-    assert r["uploadUrl"] == "https://s3/firmada" and r["expiraEn"] == 300
+    assert r["uploadUrl"] == "https://s3/firmada" 
+    assert r["expiraEn"] == 300
     assert s3_mock.generate_presigned_url.call_args.kwargs["Params"]["ContentType"] == "application/pdf"
 
 

@@ -51,6 +51,7 @@ provider:
     DB_USER: ${env:DB_USER}
     DB_PASSWORD: ${env:DB_PASSWORD}
     DOCUMENTS_BUCKET: !Ref DocumentsBucket
+    DOCUMENTS_BUCKET_OWNER: ${aws:accountId}
     # Carpeta de Google Drive para el respaldo de archivados (RN-0027). Vacio = sin respaldo.
     DRIVE_FOLDER_ID: ${env:DRIVE_FOLDER_ID, ''}
 

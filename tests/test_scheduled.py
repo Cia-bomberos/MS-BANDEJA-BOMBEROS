@@ -41,7 +41,8 @@ class TestReclasificarPrioridades:
         r = scheduled.reclasificar_prioridades({}, None)
         assert r == {"actualizados": 1}
         updates = [c for c in cursor.execute.call_args_list if "UPDATE" in c.args[0]]
-        assert len(updates) == 1 and updates[0].args[1][1] == "a"
+        assert len(updates) == 1
+        assert updates[0].args[1][1] == "a"
         conn.commit.assert_called_once()
         conn.close.assert_called_once()
 
@@ -79,7 +80,8 @@ class TestArchivarDocumentos:
         r = scheduled.archivar_documentos({}, None)
         assert r == {"archivados": 0, "respaldos_reintentados": 1}
         confirmaciones = [c for c in cursor.execute.call_args_list if "confirmado_drive = true" in c.args[0]]
-        assert len(confirmaciones) == 1 and confirmaciones[0].args[1] == ("7",)
+        assert len(confirmaciones) == 1 
+        assert confirmaciones[0].args[1] == ("7",)
 
     def test_commit_por_documento(self, conn_mock, monkeypatch):
         conn, cursor = conn_mock
