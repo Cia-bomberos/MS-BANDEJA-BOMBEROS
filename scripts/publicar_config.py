@@ -19,7 +19,7 @@ import json
 
 import boto3
 
-from verificar_dependencias import CONFIG_BUCKETS_PREFIX
+from verificar_dependencias import CONFIG_BUCKET_PREFIX
 
 SERVICE_NAME = "bomberos-f3-bandeja"
 CONFIG_KEY = "bandeja-config.json"
@@ -51,7 +51,7 @@ def main():
         "documentsBucket": documents_bucket,
     }
 
-    config_bucket = f"{CONFIG_BUCKETS_PREFIX}-{args.stage}"
+    config_bucket = f"{CONFIG_BUCKET_PREFIX}-{args.stage}"
     s3 = boto3.client("s3")
     s3.put_object(
         Bucket=config_bucket,
