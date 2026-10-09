@@ -2,6 +2,10 @@ from datetime import date, timedelta
 
 from modulo_documentos.prioridad import ALTA, BAJA, MEDIA, calcular_prioridad, esta_vencido, reclasificar
 
+from datetime import datetime, timezone
+from modulo_documentos import prioridad, tiempo
+from modulo_documentos.tiempo import LIMA
+
 HOY = date(2026, 1, 1)
 
 
@@ -51,13 +55,18 @@ class TestEstaVencido:
 class TestHoyEsElDiaDeLima:
     def test_usa_la_fecha_de_lima_y_no_la_utc_del_servidor(self, monkeypatch):
         """22:00 del 8/10 en Lima = 03:00 UTC del 9/10: 'hoy' debe seguir siendo el 8."""
-        from datetime import datetime, timezone
-        from modulo_documentos import prioridad, tiempo
-        from modulo_documentos.tiempo import LIMA
+
 
         instante = datetime(2026, 10, 9, 3, 0, tzinfo=timezone.utc)  # 22:00 en Lima
-        monkeypatch.setattr(tiempo, "ahora_lima", lambda: instante.astimezone(LIMA))
-        monkeypatch.setattr(prioridad, "hoy_lima", lambda: tiempo.ahora_lima().date())
+
+        class RelojFijo(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return instante.astimezone(tz)
+
+        monkeypatch.setattr(tiempo, "datetime", RelojFijo)
+
         fecha_limite = date(2026, 10, 18)
+        assert tiempo.hoy_lima() == date(2026, 10, 8)
         assert prioridad.dias_restantes(fecha_limite) == 10  # con la fecha UTC serían 9 (Alta)
         assert prioridad.calcular_prioridad(fecha_limite) == MEDIA

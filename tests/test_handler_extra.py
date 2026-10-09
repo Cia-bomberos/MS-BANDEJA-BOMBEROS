@@ -7,6 +7,7 @@ externo, descarga, URL de subida) y sus ramas de error. BD y S3 mockeados.
 import json
 from datetime import date, timedelta
 from unittest.mock import MagicMock
+from modulo_documentos.tiempo import hoy_lima
 
 import pytest
 
@@ -103,14 +104,14 @@ class TestObtenerDocumento:
 
     def test_otra_seccion_que_nunca_participo_no_puede_leer(self, conn_mock):
         _, cur = conn_mock
-        cur.fetchone.side_effect = [{"seccion_responsable": "Sanidad", "fecha_limite": date.today()}, None]
+        cur.fetchone.side_effect = [{"seccion_responsable": "Sanidad", "fecha_limite": hoy_lima()}, None]
         assert handler.obtener_documento(_event("Jefe_Maquinas", ID), None)["statusCode"] == 403
 
     def test_la_seccion_que_derivo_conserva_la_consulta_en_solo_lectura(self, conn_mock):
         """RN-0021 / CU-008: la sección de origen sigue viendo el documento que derivó."""
         _, cur = conn_mock
         cur.fetchone.side_effect = [
-            {"seccion_responsable": "Administracion", "fecha_limite": date.today() + timedelta(days=5)},
+            {"seccion_responsable": "Administracion", "fecha_limite": hoy_lima() + timedelta(days=5)},
             {"?column?": 1},  # el historial muestra que Sanidad actuó sobre el documento
         ]
         cur.fetchall.return_value = [{"accion": "derivacion"}]
@@ -121,7 +122,7 @@ class TestObtenerDocumento:
 
     def test_incluye_historial_y_marca_vencido(self, conn_mock):
         _, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "fecha_limite": date.today() - timedelta(days=2)}
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "fecha_limite": hoy_lima() - timedelta(days=2)}
         cur.fetchall.return_value = [{"accion": "registro"}]
         resp = handler.obtener_documento(_event("Jefe_Maquinas", ID), None)
         body = json.loads(resp["body"])
@@ -144,8 +145,8 @@ class TestListarConFiltro:
     def test_seccion_incluye_lo_que_registro_o_derivo_y_lo_marca_solo_lectura(self, conn_mock):
         _, cur = conn_mock
         cur.fetchall.return_value = [
-            {"seccion_responsable": "Sanidad", "fecha_limite": date.today() + timedelta(days=3)},
-            {"seccion_responsable": "Maquinas", "fecha_limite": date.today() + timedelta(days=3)},
+            {"seccion_responsable": "Sanidad", "fecha_limite": hoy_lima() + timedelta(days=3)},
+            {"seccion_responsable": "Maquinas", "fecha_limite": hoy_lima() + timedelta(days=3)},
         ]
         resp = handler.listar_documentos(_event("Jefe_Sanidad", query={"estado": "En proceso"}), None)
         sql, params = cur.execute.call_args.args

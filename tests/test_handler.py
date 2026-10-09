@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from modulo_documentos import tiempo
 from modulo_documentos import handler
 
 
@@ -88,10 +89,10 @@ class TestCrearDocumento:
         cursor.fetchone.return_value = {
             "id": "doc-1", "codigo_unico": None, "tipo": None, "modalidad": "simplificado",
             "estado": "Pendiente", "prioridad": "Media",
-            "fecha_limite": date.today() + timedelta(days=20), "fecha_creacion": "2026-01-01T00:00:00",
+            "fecha_limite": tiempo.hoy_lima() + timedelta(days=20), "fecha_creacion": "2026-01-01T00:00:00",
         }
         body = {"origen": "externo", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         event = _event(grupo="Jefe_Sanidad", body=body)
 
         resp = handler.crear_documento(event, None)
@@ -101,7 +102,7 @@ class TestCrearDocumento:
 
     def test_interno_sin_tipo_es_invalido(self, conn_mock):
         body = {"origen": "interno", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         event = _event(grupo="Jefe_Sanidad", body=body)
         resp = handler.crear_documento(event, None)
         assert resp["statusCode"] == 400
@@ -111,10 +112,10 @@ class TestCrearDocumento:
         cursor.fetchone.return_value = {
             "id": "doc-2", "codigo_unico": "OFICIO N° 001-2026/CGBVP/IVCDLC/B3", "tipo": "oficio",
             "modalidad": "completo", "estado": "Pendiente", "prioridad": "Media",
-            "fecha_limite": date.today() + timedelta(days=20), "fecha_creacion": "2026-01-01T00:00:00",
+            "fecha_limite": tiempo.hoy_lima() + timedelta(days=20), "fecha_creacion": "2026-01-01T00:00:00",
         }
         body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         event = _event(grupo="Jefe_Maquinas", body=body)
 
         resp = handler.crear_documento(event, None)
@@ -126,7 +127,7 @@ class TestCrearDocumento:
     def test_pdf_invalido_se_rechaza(self, conn_mock, monkeypatch):
         monkeypatch.setattr(handler.s3util, "promover_pdf", lambda key: None)
         body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         event = _event(grupo="Jefe_Maquinas", body=body)
         resp = handler.crear_documento(event, None)
         assert resp["statusCode"] == 400
@@ -135,7 +136,7 @@ class TestCrearDocumento:
         conn, cursor = conn_mock
         monkeypatch.setattr(handler.s3util, "promover_pdf", lambda key: None)
         body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         resp = handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
         assert resp["statusCode"] == 400
         conn.commit.assert_not_called()
@@ -144,9 +145,9 @@ class TestCrearDocumento:
         conn, cursor = conn_mock
         cursor.fetchone.return_value = {"id": "d", "codigo_unico": None, "tipo": None, "modalidad": "simplificado",
                                         "estado": "Pendiente", "prioridad": "Media",
-                                        "fecha_limite": date.today(), "fecha_creacion": "x"}
+                                        "fecha_limite": tiempo.hoy_lima(), "fecha_creacion": "x"}
         body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
         insert = [c for c in cursor.execute.call_args_list if "INSERT INTO documentos" in c.args[0]][0]
         assert insert.args[1][-1] == "documentos/x.pdf"
@@ -155,7 +156,7 @@ class TestCrearDocumento:
         conn, cursor = conn_mock
         cursor.execute.side_effect = RuntimeError("BD caida")
         body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
-                "fecha_limite": str(date.today() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         resp = handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
         assert resp["statusCode"] == 500
         conn.rollback.assert_called_once()

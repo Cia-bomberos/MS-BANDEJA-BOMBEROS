@@ -8,6 +8,8 @@ import pytest
 from modulo_documentos import scheduled
 
 
+HOY = date(2026, 1, 1)
+
 class _CursorCtx:
     def __init__(self, cursor):
         self.cursor = cursor
@@ -27,16 +29,20 @@ def conn_mock(monkeypatch):
     monkeypatch.setattr(scheduled, "get_connection", lambda: conn)
     return conn, cursor
 
+@pytest.fixture(autouse=True)
+def hoy_fijo(monkeypatch):
+    """El job usa hoy_lima(): se fija para que el resultado no dependa de la hora real."""
+    monkeypatch.setattr(scheduled, "hoy_lima", lambda: HOY)
+
 
 class TestReclasificarPrioridades:
     def test_actualiza_solo_los_que_cambian(self, conn_mock):
         conn, cursor = conn_mock
-        hoy = date.today()
         cursor.fetchall.return_value = [
             # Baja, vence mañana -> debe subir
-            {"id": "a", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": hoy + timedelta(days=1)},
+            {"id": "a", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": HOY + timedelta(days=1)},
             # Baja, vence en 60 días -> se queda
-            {"id": "b", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": hoy + timedelta(days=60)},
+            {"id": "b", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": HOY + timedelta(days=60)},
         ]
         r = scheduled.reclasificar_prioridades({}, None)
         assert r == {"actualizados": 1}
@@ -49,9 +55,8 @@ class TestReclasificarPrioridades:
     def test_registra_la_reclasificacion_en_el_historial(self, conn_mock):
         """RN-0014 / CU-006: el cambio automático de prioridad deja rastro con su motivo."""
         _, cursor = conn_mock
-        hoy = scheduled.hoy_lima()
         cursor.fetchall.return_value = [
-            {"id": "a", "prioridad": "Baja", "prioridad_manual": True, "fecha_limite": hoy + timedelta(days=5)},
+            {"id": "a", "prioridad": "Baja", "prioridad_manual": True, "fecha_limite": HOY + timedelta(days=5)},
         ]
         scheduled.reclasificar_prioridades({}, None)
         insert = [c for c in cursor.execute.call_args_list if "INSERT INTO historial_acciones" in c.args[0]]
@@ -62,9 +67,8 @@ class TestReclasificarPrioridades:
 
     def test_sin_cambios_no_escribe_historial(self, conn_mock):
         _, cursor = conn_mock
-        hoy = scheduled.hoy_lima()
         cursor.fetchall.return_value = [
-            {"id": "b", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": hoy + timedelta(days=60)},
+            {"id": "b", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": HOY + timedelta(days=60)},
         ]
         scheduled.reclasificar_prioridades({}, None)
         assert not [c for c in cursor.execute.call_args_list if "historial_acciones" in c.args[0]]
