@@ -62,9 +62,7 @@ def _obtener_seccion_doc(cur, documento_id) -> str | None:
 # ---------------------------------------------------------------------------
 
 def solicitar_url_subida(event, context):
-    body = json.loads(event.get("body") or "{}")
-    nombre = body.get("nombre_archivo", "documento.pdf")
-    return _respuesta(200, s3util.generar_url_subida(nombre))
+    return _respuesta(200, s3util.generar_url_subida())
 
 
 # ---------------------------------------------------------------------------

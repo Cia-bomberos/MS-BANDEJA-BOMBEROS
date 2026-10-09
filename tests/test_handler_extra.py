@@ -61,9 +61,9 @@ class TestSolicitarUrlSubida:
     def test_devuelve_la_url_y_la_key(self, monkeypatch):
         monkeypatch.setattr(
             handler.s3util, "generar_url_subida",
-            lambda nombre: {"uploadUrl": "https://s3/x", "archivo_s3_key": "documentos/a.pdf", "expiraEn": 300},
+            lambda: {"uploadUrl": "https://s3/x", "archivo_s3_key": "documentos/a.pdf", "expiraEn": 300},
         )
-        resp = handler.solicitar_url_subida(_event("Jefe_Sanidad", body={"nombre_archivo": "a.pdf"}), None)
+        resp = handler.solicitar_url_subida(_event("Jefe_Sanidad"), None)
         assert resp["statusCode"] == 200
         assert json.loads(resp["body"])["archivo_s3_key"] == "documentos/a.pdf"
 
