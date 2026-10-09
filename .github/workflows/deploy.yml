@@ -21,13 +21,13 @@ jobs:
       DB_PORT: '5432'
       # La BD cambia por stage: se elige el secret segun la branch
       DB_NAME: >-
-        ${{ github.ref_name == 'main' && secrets.DB_NAME_PROD
-         || github.ref_name == 'uat'  && secrets.DB_NAME_UAT
-         || github.ref_name == 'qa'   && secrets.DB_NAME_QA
-         || secrets.DB_NAME_DEV }}
+        ${{ github.ref_name == 'main' && vars.DB_NAME_PROD
+         || github.ref_name == 'uat'  && vars.DB_NAME_UAT
+         || github.ref_name == 'qa'   && vars.DB_NAME_QA
+         || vars.DB_NAME_DEV }}
       DB_USER: ${{ secrets.DB_USER }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+      DRIVE_FOLDER_ID: ${{ vars.DRIVE_FOLDER_ID }}
 
     steps:
       - name: Checkout
