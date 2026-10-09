@@ -454,6 +454,7 @@ def _parsear_envio(body: dict):
     fecha/hora se usa el momento actual de Lima."""
     medio = str(body.get("medio") or "").strip()
     destinatario = str(body.get("destinatario") or "").strip()
+    
     if not medio or not destinatario:
         return None, "medio y destinatario son obligatorios."
 
@@ -506,10 +507,16 @@ def registrar_envio_externo(event, context):
                 "UPDATE documentos SET estado = 'Atendido', atendido_en = now(), fecha_actualizacion = now() WHERE id = %s",
                 (documento_id,),
             )
+
+            detalle = (
+                f"Envio externo registrado. Medio: {envio['medio']}. " 
+                f"Destinatario: {envio['destinatario']}. "
+                f"Enviado el {envio['fecha']:%d/%m/%Y} a las {envio['hora']:%H:%M}."
+                "Documento atendido"
+            )
+
             _registrar_historial(
-                cur, documento_id, event, "envio_externo",
-                f"Envío externo registrado: medio {envio['medio']}, destinatario {envio['destinatario']}, "
-                f"enviado el {envio['fecha']:%d/%m/%Y} a las {envio['hora']:%H:%M}. Documento Atendido.",
+                cur, documento_id, event, "envio_externo", detalle
             )
         conn.commit()
         return _respuesta(200, {"mensaje": "Envío externo registrado. Documento marcado como Atendido."})

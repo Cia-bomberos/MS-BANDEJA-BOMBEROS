@@ -140,7 +140,8 @@ class TestListarConFiltro:
         resp = handler.listar_documentos(_event("Jefatura", query={"estado": "Pendiente"}), None)
         assert resp["statusCode"] == 200
         sql, params = cur.execute.call_args.args
-        assert "estado = %s" in sql and params == ("Pendiente",)
+        assert "estado = %s" in sql
+        assert params == ("Pendiente",)
 
     def test_seccion_incluye_lo_que_registro_o_derivo_y_lo_marca_solo_lectura(self, conn_mock):
         _, cur = conn_mock
@@ -150,7 +151,8 @@ class TestListarConFiltro:
         ]
         resp = handler.listar_documentos(_event("Jefe_Sanidad", query={"estado": "En proceso"}), None)
         sql, params = cur.execute.call_args.args
-        assert "historial_acciones" in sql and params == ("Sanidad", "Sanidad", "En proceso")
+        assert "historial_acciones" in sql
+        assert params == ("Sanidad", "Sanidad", "En proceso")
         docs = json.loads(resp["body"])["documentos"]
         assert [d["solo_lectura"] for d in docs] == [False, True]
 
@@ -336,7 +338,8 @@ class TestEnvioExterno:
         body = {"medio": "Mensajería", "destinatario": "INDECI"}
         assert handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=body), None)["statusCode"] == 200
         detalle = [c for c in cur.execute.call_args_list if "INSERT INTO historial_acciones" in c.args[0]][0].args[1][5]
-        assert "INDECI" in detalle and "enviado el" in detalle
+        assert "INDECI" in detalle
+        assert "enviado el" in detalle.lower()
 
     def test_acepta_los_nombres_cortos_fecha_y_hora(self, conn_mock):
         _, cur = conn_mock
@@ -344,7 +347,8 @@ class TestEnvioExterno:
         body = {"medio": "Correo", "destinatario": "X", "fecha": "2026-01-02", "hora": "09:05:00"}
         assert handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=body), None)["statusCode"] == 200
         detalle = [c for c in cur.execute.call_args_list if "INSERT INTO historial_acciones" in c.args[0]][0].args[1][5]
-        assert "02/01/2026" in detalle and "09:05" in detalle
+        assert "02/01/2026" in detalle
+        assert "09:05" in detalle
 
     def test_error_de_bd_hace_rollback(self, conn_mock):
         conn, cur = conn_mock
