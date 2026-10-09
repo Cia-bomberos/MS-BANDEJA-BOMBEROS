@@ -99,9 +99,11 @@ class TestPromoverPdf:
         s3_mock.head_object.return_value = {"ContentLength": 1000}
         s3_mock.get_object.return_value = {"Body": io.BytesIO(b"%PDF-")}
         nueva = s3util.promover_pdf("pendientes/a.pdf")
-        assert nueva.startswith("documentos/") and nueva.endswith(".pdf")
+        assert nueva.startswith("documentos/")
+        assert nueva.endswith(".pdf")
         copia = s3_mock.copy_object.call_args.kwargs
-        assert copia["Key"] == nueva and copia["CopySource"]["Key"] == "pendientes/a.pdf"
+        assert copia["Key"] == nueva
+        assert copia["CopySource"]["Key"] == "pendientes/a.pdf"
         s3_mock.delete_object.assert_called_once_with(
             Bucket="bomberos-documentos-test", Key="pendientes/a.pdf", ExpectedBucketOwner="123456789012"
         )
