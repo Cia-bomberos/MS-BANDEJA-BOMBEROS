@@ -1,0 +1,6 @@
+# Dependencias de PRODUCCION que se empaquetan dentro de cada Lambda
+# (serverless-python-requirements lee este archivo -- ver serverless.yml).
+# boto3 NO va aca: el runtime de Lambda ya lo trae incluido.
+psycopg2-binary==2.9.*
+# Integracion con Google Drive (RN-0027): ver modulo_documentos/drive.py
+requests>=2.31,<3

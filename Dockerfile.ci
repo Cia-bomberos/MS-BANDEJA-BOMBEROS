@@ -1,0 +1,4 @@
+FROM node:24-alpine
+
+# Instalar Java 21 (para SonarScanner), Python 3 y Node/npm
+RUN apk add --no-cache openjdk21-jre python3 py3-pip

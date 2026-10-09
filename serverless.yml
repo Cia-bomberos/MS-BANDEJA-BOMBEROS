@@ -1,0 +1,209 @@
+service: bomberos-f3-bandeja
+
+plugins:
+  - serverless-python-requirements
+
+# Anchor reutilizado en el "authorizer:" de cada función HTTP (evita repetir
+# el mismo bloque 11 veces). Debe declararse antes de cualquier *alias que
+# lo use, por eso va al principio del archivo.
+custom:
+  # ARN del User Pool que valida el authorizer. Si se define USER_POOL_ARN
+  # (ej. el pool de seguridad que vive en OTRA cuenta de AWS Academy), se usa
+  # ese. Si no, cae al pool del stack de seguridad de esta misma cuenta.
+  userPoolArn: ${env:USER_POOL_ARN, self:custom.localUserPoolArn}
+  localUserPoolArn: arn:aws:cognito-idp:${aws:region}:${aws:accountId}:userpool/${cf:bomberos-f3-backend-${sls:stage}.UserPoolId}
+
+  cognitoAuthorizer: &cognitoAuthorizer
+    name: ApiGatewayAuthorizer
+    type: COGNITO_USER_POOLS
+    authorizerId:
+      Ref: ApiGatewayAuthorizer
+
+  # psycopg2 tiene extensión en C y no es portable tal cual a Lambda: hay que
+  # empaquetarlo para Amazon Linux. 'non-linux' hace esto automático para
+  # los dos casos que usamos:
+  #   - Deploy desde Jenkins (agente Linux x86_64, igual al runtime de
+  #     Lambda): NO dockeriza, pip instala directo y el wheel manylinux ya
+  #     es compatible -- deploy mas rapido, sin Docker-in-Docker.
+  #   - Deploy manual desde Windows/Mac (ej. para probar algo sin esperar a
+  #     Jenkins): SI dockeriza (necesita Docker Desktop corriendo), porque
+  #     ahi un pip install directo traeria el wheel de Windows/Mac, no el
+  #     de Linux, y el Lambda fallaria en runtime igual que al principio.
+  pythonRequirements:
+    dockerizePip: 'non-linux'
+    slim: true
+    useDownloadCache: true
+    useStaticCache: true
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 15
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    DB_HOST: ${env:DB_HOST}
+    DB_PORT: ${env:DB_PORT, '5432'}
+    DB_NAME: ${env:DB_NAME}
+    DB_USER: ${env:DB_USER}
+    DB_PASSWORD: ${env:DB_PASSWORD}
+    DOCUMENTS_BUCKET: !Ref DocumentsBucket
+    # Carpeta de Google Drive para el respaldo de archivados (RN-0027). Vacio = sin respaldo.
+    DRIVE_FOLDER_ID: ${env:DRIVE_FOLDER_ID, ''}
+
+functions:
+  solicitarUrlSubida:
+    handler: modulo_documentos/handler.solicitar_url_subida
+    events:
+      - http:
+          path: documentos/upload-url
+          method: post
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  crearDocumento:
+    handler: modulo_documentos/handler.crear_documento
+    events:
+      - http:
+          path: documentos
+          method: post
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  listarDocumentos:
+    handler: modulo_documentos/handler.listar_documentos
+    events:
+      - http:
+          path: documentos
+          method: get
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  obtenerDocumento:
+    handler: modulo_documentos/handler.obtener_documento
+    events:
+      - http:
+          path: documentos/{id}
+          method: get
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  derivarDocumento:
+    handler: modulo_documentos/handler.derivar_documento
+    events:
+      - http:
+          path: documentos/{id}/derivar
+          method: patch
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  actualizarArchivo:
+    handler: modulo_documentos/handler.actualizar_archivo
+    events:
+      - http:
+          path: documentos/{id}/archivo
+          method: patch
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  marcarAtendido:
+    handler: modulo_documentos/handler.marcar_atendido
+    events:
+      - http:
+          path: documentos/{id}/atender
+          method: patch
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  asignarPrioridad:
+    handler: modulo_documentos/handler.asignar_prioridad
+    events:
+      - http:
+          path: documentos/{id}/prioridad
+          method: patch
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  registrarEnvioExterno:
+    handler: modulo_documentos/handler.registrar_envio_externo
+    events:
+      - http:
+          path: documentos/{id}/envio-externo
+          method: post
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  descargarDocumento:
+    handler: modulo_documentos/handler.descargar_documento
+    events:
+      - http:
+          path: documentos/{id}/descargar
+          method: get
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  eliminarDocumento:
+    handler: modulo_documentos/handler.eliminar_documento
+    events:
+      - http:
+          path: documentos/{id}
+          method: delete
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  # --- Jobs programados (RN-0017, RN-0026/0027) ---
+
+  reclasificarPrioridades:
+    handler: modulo_documentos/scheduled.reclasificar_prioridades
+    events:
+      - schedule: rate(1 hour)
+
+  archivarDocumentos:
+    handler: modulo_documentos/scheduled.archivar_documentos
+    # Descarga cada PDF de S3 y lo sube a Drive: necesita mas margen que un endpoint.
+    timeout: 120
+    memorySize: 512
+    events:
+      - schedule: rate(1 hour)
+
+resources:
+  Resources:
+
+    # ---------- Autorizador de API Gateway basado en Cognito ----------
+    # Reutiliza el User Pool de MS-SEGURIDAD-BOMBEROS (mismo stage) en vez
+    # de crear uno nuevo, vía cross-stack reference (${cf:...}).
+    ApiGatewayAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: cognito-authorizer-bandeja-${sls:stage}
+        Type: COGNITO_USER_POOLS
+        IdentitySource: method.request.header.Authorization
+        RestApiId: !Ref ApiGatewayRestApi
+        ProviderARNs:
+          - ${self:custom.userPoolArn}
+
+    # ---------- Bucket de documentos (PDFs) ----------
+    DocumentsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: bomberos-documentos-${sls:stage}-${aws:accountId}
+        # Privado: se accede solo vía URLs pre-firmadas (subida y descarga).
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        CorsConfiguration:
+          CorsRules:
+            - AllowedMethods: [GET, PUT]
+              AllowedOrigins: ['*']
+              AllowedHeaders: ['*']
+
+  Outputs:
+    DocumentsBucketName:
+      Value: !Ref DocumentsBucket
+      Export:
+        Name: bomberos-f3-bandeja-${sls:stage}-documents-bucket
