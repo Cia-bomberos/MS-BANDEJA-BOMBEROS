@@ -8,11 +8,15 @@ RNF-0007: validar el contenido real (firma %PDF-), no solo la extensión.
 import logging
 import os
 import uuid
-
 import boto3
+import re
 
 MAX_BYTES = 20 * 1024 * 1024  # 20 MB
 PDF_MAGIC = b"%PDF-"
+PDF_EOF = b"%%EOF"
+PDF_MIN_BYTES = 100
+
+_RE_OBJ_PDF = re.compile(rb"(?m)^\d+\s+\d+\s+obj\b")
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +72,17 @@ def generar_url_descarga(key: str, expira_segundos: int = 300) -> str:
         ExpiresIn=expira_segundos,
     )
 
+def _leer_rango(key: str, rango: str) -> bytes:
+    try:
+        resp = s3.get_object(
+            Bucket=_bucket(),
+            Key=key,
+            Range=rango,
+            ExpectedBucketOwner=_owner(),
+        )
+    except s3.exceptions.ClientError:
+        return b""
+    return resp["Body"].read()
 
 def validar_pdf(key: str) -> bool:
     """Verifica tamaño (<=20MB) y que el contenido real sea un PDF (firma %PDF-)."""
@@ -79,21 +94,20 @@ def validar_pdf(key: str) -> bool:
         )
     except s3.exceptions.ClientError:
         return False
-
-    if head["ContentLength"] > MAX_BYTES or head["ContentLength"] < len(PDF_MAGIC):
+    tamanio = head["ContentLength"]
+    if tamanio > MAX_BYTES or tamanio < PDF_MIN_BYTES:
         return False
 
-    try:
-        inicio = s3.get_object(
-            Bucket=_bucket(),
-            Key=key,
-            Range="bytes=0-4",
-            ExpectedBucketOwner=_owner(),
-        )
-    except s3.exceptions.ClientError:
+    if not _leer_rango(key, "bytes=0-4").startswith(PDF_MAGIC):
         return False
-    firma = inicio["Body"].read()
-    return firma.startswith(PDF_MAGIC)
+    cola = _leer_rango(key, f"bytes=-{min(1024, tamanio)}")
+    if PDF_EOF not in cola:
+        return False
+    cuerpo = _leer_rango(key, "bytes=0-2047")
+    if not _RE_OBJ_PDF.search(cuerpo):
+        return False
+    
+    return True
 
 
 def eliminar(key: str) -> None:

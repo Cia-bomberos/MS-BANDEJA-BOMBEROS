@@ -15,6 +15,20 @@ def s3_mock(monkeypatch):
     monkeypatch.setattr(s3util, "s3", m)
     return m
 
+def _pdf_valido_en_s3(s3_mock, tamano: int = 5000):
+    """Configura s3_mock para simular un PDF bien formado.
+
+    validar_pdf hace 3 get_object con Range:
+      1) cabecera  -> bytes=0-4          -> b"%PDF-"
+      2) cola      -> bytes=-N           -> contiene %%EOF
+      3) cuerpo    -> bytes=0-2047       -> contiene ' obj'
+    """
+    s3_mock.head_object.return_value = {"ContentLength": tamano}
+    s3_mock.get_object.side_effect = [
+        {"Body": io.BytesIO(b"%PDF-")},
+        {"Body": io.BytesIO(b"...contenido...\n%%EOF\n")},
+        {"Body": io.BytesIO(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n")},
+    ]
 
 def test_generar_key_siempre_termina_en_pdf_y_es_unica():
     a, b = s3util.generar_key(), s3util.generar_key()
@@ -37,8 +51,7 @@ def test_url_de_descarga(s3_mock):
 
 
 def test_validar_pdf_ok(s3_mock):
-    s3_mock.head_object.return_value = {"ContentLength": 1000}
-    s3_mock.get_object.return_value = {"Body": io.BytesIO(b"%PDF-")}
+    _pdf_valido_en_s3(s3_mock)
     assert s3util.validar_pdf("k") is True
 
 
@@ -96,8 +109,7 @@ def test_eliminar_nunca_lanza(s3_mock):
 
 class TestPromoverPdf:
     def test_mueve_el_pdf_valido_a_documentos(self, s3_mock):
-        s3_mock.head_object.return_value = {"ContentLength": 1000}
-        s3_mock.get_object.return_value = {"Body": io.BytesIO(b"%PDF-")}
+        _pdf_valido_en_s3(s3_mock)
         nueva = s3util.promover_pdf("pendientes/a.pdf")
         assert nueva.startswith("documentos/")
         assert nueva.endswith(".pdf")
@@ -131,8 +143,33 @@ class TestPromoverPdf:
 
 def test_todas_las_llamadas_a_s3_envian_el_dueno_del_bucket(s3_mock):
     """ExpectedBucketOwner en head/get/copy/delete: S3 rechaza el bucket si no es de nuestra cuenta."""
-    s3_mock.head_object.return_value = {"ContentLength": 1000}
-    s3_mock.get_object.return_value = {"Body": io.BytesIO(b"%PDF-")}
+    _pdf_valido_en_s3(s3_mock)
     s3util.promover_pdf("pendientes/a.pdf")
     for llamada in (s3_mock.head_object, s3_mock.get_object, s3_mock.copy_object, s3_mock.delete_object):
         assert llamada.call_args.kwargs["ExpectedBucketOwner"] == "123456789012"
+
+
+def test_validar_pdf_rechaza_si_falta_eof(s3_mock):
+    s3_mock.head_object.return_value = {"ContentLength": 5000}
+    s3_mock.get_object.side_effect = [
+        {"Body": io.BytesIO(b"%PDF-")},
+        {"Body": io.BytesIO(b"...sin marca eof")},
+        {"Body": io.BytesIO(b"1 0 obj\n<<>>\nendobj\n")},
+    ]
+    assert s3util.validar_pdf("k") is False
+
+
+def test_validar_pdf_rechaza_si_falta_objeto_pdf(s3_mock):
+    s3_mock.head_object.return_value = {"ContentLength": 5000}
+    s3_mock.get_object.side_effect = [
+        {"Body": io.BytesIO(b"%PDF-")},
+        {"Body": io.BytesIO(b"...\n%%EOF\n")},
+        {"Body": io.BytesIO(b"sin objetos pdf aqui")},
+    ]
+    assert s3util.validar_pdf("k") is False
+
+
+def test_validar_pdf_rechaza_archivo_demasiado_pequeno(s3_mock):
+    s3_mock.head_object.return_value = {"ContentLength": 10}
+    assert s3util.validar_pdf("k") is False
+    s3_mock.get_object.assert_not_called()
