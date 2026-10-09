@@ -30,7 +30,7 @@ from botocore.exceptions import ClientError
 from resolver_user_pool import resolver_arn
 
 SECURITY_SERVICE_NAME = "bomberos-f3-backend"
-CONFIG_BUCKET_PREFIX = "bomberos-f3-bandeja-config"
+CONFIG_BUCKET_PREFIX = "bomberos-f3-bandeja-cfg"
 REGION = "us-east-1"
 
 
@@ -113,6 +113,10 @@ def asegurar_bucket_config(stage: str):
         print(f"OK: el bucket de config '{bucket}' ya existe.")
     except ClientError as e:
         codigo = e.response["Error"]["Code"]
+        if codigo in ("403", "AccessDenied", "Forbidden"):
+            raise SystemExit(
+                f"\nEl bucket '{bucket}' existe pero pertenece a otra cuenta de AWS "
+            )
         if codigo not in ("404", "NoSuchBucket"):
             raise
         existe = False

@@ -21,7 +21,7 @@ jobs:
       DB_PORT: '5432'
       # La BD cambia por stage: se elige el secret segun la branch
       DB_NAME: >-
-        ${{ github.ref_name == 'main' && vars.DB_NAME_PROD
+        ${{ github.ref_name == 'main' && vars.DB_NAM_PROD
          || github.ref_name == 'uat'  && vars.DB_NAME_UAT
          || github.ref_name == 'qa'   && vars.DB_NAME_QA
          || vars.DB_NAME_DEV }}
