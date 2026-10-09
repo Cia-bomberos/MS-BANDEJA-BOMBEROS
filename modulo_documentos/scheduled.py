@@ -4,21 +4,22 @@ No tienen event de API Gateway: se disparan por cron, no por HTTP.
 """
 
 import logging
-from datetime import date
-
 from modulo_documentos import drive
 from modulo_documentos.db import get_connection
-from modulo_documentos.prioridad import reclasificar
+from modulo_documentos.prioridad import dias_restantes, reclasificar
+from modulo_documentos.tiempo import hoy_lima
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+USUARIO_SISTEMA = "sistema"  # autor de las acciones automáticas en historial_acciones
 
 
 def reclasificar_prioridades(event, context):
     """RN-0017: reevalúa periódicamente la prioridad de los documentos en
     estado 'Pendiente'. Una vez que el documento pasa a 'En proceso' deja
     de reclasificarse (conserva la prioridad vigente, según RN-0017)."""
-    hoy = date.today()
+    hoy = hoy_lima()  # día de Lima, no el UTC del servidor
     conn = get_connection()
     actualizados = 0
     try:
@@ -34,6 +35,20 @@ def reclasificar_prioridades(event, context):
                     cur.execute(
                         "UPDATE documentos SET prioridad = %s, fecha_actualizacion = now() WHERE id = %s",
                         (nueva, doc["id"]),
+                    )
+                    # RN-0014 / CU-006: toda reclasificación automática queda en el historial.
+                    cur.execute(
+                        """
+                        INSERT INTO historial_acciones
+                            (documento_id, usuario_sub, usuario_nombre, seccion, accion, detalle)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            doc["id"], USUARIO_SISTEMA, "Sistema (reclasificación automática)", "Sistema",
+                            "reclasificacion_automatica",
+                            f"Prioridad reclasificada de {doc['prioridad']} a {nueva}: "
+                            f"quedan {dias_restantes(doc['fecha_limite'], hoy)} día(s) para la fecha límite.",
+                        ),
                     )
                     actualizados += 1
         conn.commit()

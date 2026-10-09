@@ -13,11 +13,14 @@ Antes, en Google Cloud Console (con esa misma cuenta):
   3. "Credenciales" > Crear credenciales > ID de cliente de OAuth > tipo
      "Aplicación de escritorio". Copiar el client_id y el client_secret.
 
-Uso:
+Uso (con el JSON que descarga Google Cloud al crear el cliente OAuth):
+    python scripts/obtener_token_drive.py --credenciales "C:\\ruta\\client_secret_xxx.json"
+o pasando los valores a mano:
     python scripts/obtener_token_drive.py --client-id <ID> --client-secret <SECRET>
+Guardar ese JSON FUERA de la carpeta del repo (ej. Descargas): contiene el client_secret.
 
 Imprime un JSON. Guardarlo como google-oauth.json y subirlo (NO al repo):
-    aws s3 cp google-oauth.json s3://bomberos-documentos-<stage>/config/google-oauth.json
+    aws s3 cp google-oauth.json s3://bomberos-documentos-<stage>-<id de cuenta>/config/google-oauth.json
 """
 
 import argparse
@@ -88,11 +91,24 @@ def esperar_codigo(state: str) -> str:
     return resultado["code"]
 
 
+def leer_credenciales(ruta: str):
+    """Lee el JSON descargado de Google Cloud ({"installed": {...}} o {"web": {...}})."""
+    with open(ruta, encoding="utf-8") as f:
+        datos = json.load(f)
+    bloque = datos.get("installed") or datos.get("web") or datos
+    return bloque["client_id"], bloque["client_secret"]
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--client-id", required=True)
-    parser.add_argument("--client-secret", required=True)
+    parser.add_argument("--credenciales", help="JSON client_secret_*.json descargado de Google Cloud")
+    parser.add_argument("--client-id")
+    parser.add_argument("--client-secret")
     args = parser.parse_args()
+    if args.credenciales:
+        args.client_id, args.client_secret = leer_credenciales(args.credenciales)
+    if not (args.client_id and args.client_secret):
+        parser.error("indica --credenciales <archivo.json> o --client-id y --client-secret")
 
     state = secrets.token_urlsafe(16)
     url = url_autorizacion(args.client_id, state)

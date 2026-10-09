@@ -46,3 +46,18 @@ class TestEstaVencido:
 
     def test_fecha_futura_no_esta_vencido(self):
         assert esta_vencido(HOY + timedelta(days=1), HOY) is False
+
+
+class TestHoyEsElDiaDeLima:
+    def test_usa_la_fecha_de_lima_y_no_la_utc_del_servidor(self, monkeypatch):
+        """22:00 del 8/10 en Lima = 03:00 UTC del 9/10: 'hoy' debe seguir siendo el 8."""
+        from datetime import datetime, timezone
+        from modulo_documentos import prioridad, tiempo
+        from modulo_documentos.tiempo import LIMA
+
+        instante = datetime(2026, 10, 9, 3, 0, tzinfo=timezone.utc)  # 22:00 en Lima
+        monkeypatch.setattr(tiempo, "ahora_lima", lambda: instante.astimezone(LIMA))
+        monkeypatch.setattr(prioridad, "hoy_lima", lambda: tiempo.ahora_lima().date())
+        fecha_limite = date(2026, 10, 18)
+        assert prioridad.dias_restantes(fecha_limite) == 10  # con la fecha UTC serían 9 (Alta)
+        assert prioridad.calcular_prioridad(fecha_limite) == MEDIA

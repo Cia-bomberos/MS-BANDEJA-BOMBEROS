@@ -55,8 +55,12 @@ def conn_mock(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def s3_valido(monkeypatch):
-    """Por defecto, cualquier archivo_s3_key se valida como PDF OK."""
-    monkeypatch.setattr(handler.s3util, "validar_pdf", lambda key: True)
+    """Por defecto, cualquier archivo_s3_key se valida como PDF OK y se 'promueve'
+    a su key definitiva. Se registra qué keys se eliminaron de S3."""
+    monkeypatch.setattr(handler.s3util, "promover_pdf", lambda key: key.replace("pendientes/", "documentos/"))
+    eliminados = []
+    monkeypatch.setattr(handler.s3util, "eliminar", eliminados.append)
+    return eliminados
 
 
 @pytest.fixture
@@ -120,12 +124,58 @@ class TestCrearDocumento:
         assert body_resp["codigo_unico"] == "OFICIO N° 001-2026/CGBVP/IVCDLC/B3"
 
     def test_pdf_invalido_se_rechaza(self, conn_mock, monkeypatch):
-        monkeypatch.setattr(handler.s3util, "validar_pdf", lambda key: False)
+        monkeypatch.setattr(handler.s3util, "promover_pdf", lambda key: None)
         body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "documentos/x.pdf",
                 "fecha_limite": str(date.today() + timedelta(days=20))}
         event = _event(grupo="Jefe_Maquinas", body=body)
         resp = handler.crear_documento(event, None)
         assert resp["statusCode"] == 400
+
+    def test_pdf_invalido_no_crea_nada_en_la_bd(self, conn_mock, monkeypatch):
+        conn, cursor = conn_mock
+        monkeypatch.setattr(handler.s3util, "promover_pdf", lambda key: None)
+        body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
+                "fecha_limite": str(date.today() + timedelta(days=20))}
+        resp = handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
+        assert resp["statusCode"] == 400
+        conn.commit.assert_not_called()
+
+    def test_guarda_la_key_definitiva_no_la_de_pendientes(self, conn_mock, s3_valido):
+        conn, cursor = conn_mock
+        cursor.fetchone.return_value = {"id": "d", "codigo_unico": None, "tipo": None, "modalidad": "simplificado",
+                                        "estado": "Pendiente", "prioridad": "Media",
+                                        "fecha_limite": date.today(), "fecha_creacion": "x"}
+        body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
+                "fecha_limite": str(date.today() + timedelta(days=20))}
+        handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
+        insert = [c for c in cursor.execute.call_args_list if "INSERT INTO documentos" in c.args[0]][0]
+        assert insert.args[1][-1] == "documentos/x.pdf"
+
+    def test_error_de_bd_elimina_el_pdf_para_no_dejarlo_huerfano(self, conn_mock, s3_valido):
+        conn, cursor = conn_mock
+        cursor.execute.side_effect = RuntimeError("BD caida")
+        body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
+                "fecha_limite": str(date.today() + timedelta(days=20))}
+        resp = handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
+        assert resp["statusCode"] == 500
+        conn.rollback.assert_called_once()
+        assert s3_valido == ["documentos/x.pdf"]
+
+    def test_el_anio_del_codigo_es_el_de_lima(self, conn_mock, monkeypatch):
+        """A las 23:30 del 31/12 en Lima, UTC ya es 2027; el código debe ser 2026."""
+        from datetime import datetime
+        from modulo_documentos import tiempo
+        fijo = datetime(2026, 12, 31, 23, 30, tzinfo=tiempo.LIMA)
+        monkeypatch.setattr(handler, "hoy_lima", lambda: fijo.date())
+        anios = []
+        monkeypatch.setattr(handler, "siguiente_correlativo", lambda c, tipo, anio: anios.append(anio) or 1)
+        conn, cursor = conn_mock
+        cursor.fetchone.return_value = {"id": "d", "codigo_unico": "x", "tipo": "oficio", "modalidad": "completo",
+                                        "estado": "Pendiente", "prioridad": "Media",
+                                        "fecha_limite": date.today(), "fecha_creacion": "x"}
+        body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "pendientes/x.pdf", "fecha_limite": "2027-03-01"}
+        handler.crear_documento(_event(grupo="Jefe_Maquinas", body=body), None)
+        assert anios == [2026]
 
     def test_fecha_limite_mal_formateada(self, conn_mock):
         body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "documentos/x.pdf",
@@ -161,7 +211,7 @@ class TestListarDocumentos:
         assert resp["statusCode"] == 200
         args = cursor.execute.call_args[0]
         assert "seccion_responsable" in args[0]
-        assert args[1] == ("Sanidad",)
+        assert args[1] == ("Sanidad", "Sanidad")
 
     def test_sin_rol_reconocido_se_rechaza(self, conn_mock):
         cursor = conn_mock[1]

@@ -46,6 +46,29 @@ class TestReclasificarPrioridades:
         conn.commit.assert_called_once()
         conn.close.assert_called_once()
 
+    def test_registra_la_reclasificacion_en_el_historial(self, conn_mock):
+        """RN-0014 / CU-006: el cambio automático de prioridad deja rastro con su motivo."""
+        _, cursor = conn_mock
+        hoy = scheduled.hoy_lima()
+        cursor.fetchall.return_value = [
+            {"id": "a", "prioridad": "Baja", "prioridad_manual": True, "fecha_limite": hoy + timedelta(days=5)},
+        ]
+        scheduled.reclasificar_prioridades({}, None)
+        insert = [c for c in cursor.execute.call_args_list if "INSERT INTO historial_acciones" in c.args[0]]
+        assert len(insert) == 1
+        doc_id, sub, nombre, seccion, accion, detalle = insert[0].args[1]
+        assert (doc_id, sub, accion) == ("a", "sistema", "reclasificacion_automatica")
+        assert "Baja" in detalle and "Alta" in detalle and "5 día" in detalle
+
+    def test_sin_cambios_no_escribe_historial(self, conn_mock):
+        _, cursor = conn_mock
+        hoy = scheduled.hoy_lima()
+        cursor.fetchall.return_value = [
+            {"id": "b", "prioridad": "Baja", "prioridad_manual": False, "fecha_limite": hoy + timedelta(days=60)},
+        ]
+        scheduled.reclasificar_prioridades({}, None)
+        assert not [c for c in cursor.execute.call_args_list if "historial_acciones" in c.args[0]]
+
     def test_sin_pendientes_no_actualiza_nada(self, conn_mock):
         _, cursor = conn_mock
         cursor.fetchall.return_value = []
