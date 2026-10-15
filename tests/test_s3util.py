@@ -1,3 +1,4 @@
+import re
 """Tests de modulo_documentos/s3util.py con boto3 mockeado."""
 
 import io
@@ -15,19 +16,30 @@ def s3_mock(monkeypatch):
     monkeypatch.setattr(s3util, "s3", m)
     return m
 
+def pdf_real_bytes() -> bytes:
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    w.add_blank_page(width=200, height=200)
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
 def _pdf_valido_en_s3(s3_mock, tamano: int = 5000):
     """Configura s3_mock para simular un PDF bien formado.
 
-    validar_pdf hace 3 get_object con Range:
+    validar_pdf hace 4 get_object con Range:
       1) cabecera  -> bytes=0-4          -> b"%PDF-"
       2) cola      -> bytes=-N           -> contiene %%EOF
       3) cuerpo    -> bytes=0-2047       -> contiene ' obj'
+      4) completo  -> el archivo entero  -> lo parsea pypdf
     """
     s3_mock.head_object.return_value = {"ContentLength": tamano}
     s3_mock.get_object.side_effect = [
         {"Body": io.BytesIO(b"%PDF-")},
         {"Body": io.BytesIO(b"...contenido...\n%%EOF\n")},
         {"Body": io.BytesIO(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n")},
+        {"Body": io.BytesIO(pdf_real_bytes())},
     ]
 
 def test_generar_key_siempre_termina_en_pdf_y_es_unica():
@@ -173,3 +185,47 @@ def test_validar_pdf_rechaza_archivo_demasiado_pequeno(s3_mock):
     s3_mock.head_object.return_value = {"ContentLength": 10}
     assert s3util.validar_pdf("k") is False
     s3_mock.get_object.assert_not_called()
+
+class TestPdfLegible:
+    def test_pdf_real_ok(self):
+        assert s3util._pdf_legible(pdf_real_bytes()) is True
+
+    def test_texto_renombrado_falla(self):
+        assert s3util._pdf_legible(b"%PDF-1.4\nhola\n1 0 obj\n%%EOF\n") is False
+
+    def test_truncado_falla(self):
+        d = pdf_real_bytes()
+        assert s3util._pdf_legible(d[: len(d) // 2] + b"\n%%EOF\n") is False
+
+    def test_cabecera_sola_falla(self):
+        assert s3util._pdf_legible(b"%PDF-1.4\n") is False
+
+    def test_cifrado_se_acepta(self):
+        from pypdf import PdfWriter
+        w = PdfWriter()
+        w.add_blank_page(width=100, height=100)
+        w.encrypt("x")
+        b = io.BytesIO()
+        w.write(b)
+        assert s3util._pdf_legible(b.getvalue()) is True
+
+    def test_xref_roto_usa_fallback(self):
+        d = pdf_real_bytes()
+        d = re.sub(rb"startxref\s+\d+", b"startxref\n999999", d)
+        assert s3util._pdf_legible(d) is True
+
+    def test_sin_pypdf_no_bloquea(self, monkeypatch):
+        import builtins
+        real = builtins.__import__
+
+        def falso(name, *a, **k):
+            if name == "pypdf":
+                raise ImportError
+            return real(name, *a, **k)
+
+        monkeypatch.setattr(builtins, "__import__", falso)
+        assert s3util._pdf_legible(b"basura") is True
+
+    def test_leer_completo_error_devuelve_vacio(self, s3_mock):
+        s3_mock.get_object.side_effect = RuntimeError("x")
+        assert s3util._leer_completo("k") == b""

@@ -5,11 +5,13 @@ RNF-0006: máximo 20MB por archivo.
 RNF-0007: validar el contenido real (firma %PDF-), no solo la extensión.
 """
 
+import io
 import logging
 import os
-import uuid
-import boto3
 import re
+import uuid
+
+import boto3
 
 MAX_BYTES = 20 * 1024 * 1024  # 20 MB
 PDF_MAGIC = b"%PDF-"
@@ -84,8 +86,58 @@ def _leer_rango(key: str, rango: str) -> bytes:
         return b""
     return resp["Body"].read()
 
+def _pdf_legible(datos: bytes) -> bool:
+    """RNF-0007: abre el PDF de verdad (estructura, tabla de referencias y primera
+    página). La firma y el %%EOF no bastan: un PDF dañado en el medio los conserva.
+
+    Primero en modo estricto. Si falla solo por la tabla de referencias (algunos
+    PDF reales traen un puntero desfasado pero se leen bien) se reintenta en modo
+    tolerante, exigiendo que las primeras páginas se puedan leer. Un PDF cifrado
+    se acepta: no se puede abrir sin contraseña, pero sí es un PDF."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:  # sin la librería no se puede verificar a fondo
+        logger.warning("pypdf no está disponible: se omite la validación profunda del PDF.")
+        return True
+
+    try:
+        lector = PdfReader(io.BytesIO(datos), strict=True)
+        if lector.is_encrypted:
+            return True
+        if len(lector.pages) < 1:
+            return False
+        lector.pages[0].get_contents()
+        return True
+    except Exception as e:  # noqa: BLE001 - pypdf lanza muchos tipos según el daño
+        if "xref" not in str(e).lower():
+            return False
+
+    try:
+        lector = PdfReader(io.BytesIO(datos), strict=False)
+        if lector.is_encrypted:
+            return True
+        paginas = len(lector.pages)
+        if paginas < 1:
+            return False
+        for pagina in list(lector.pages)[:3]:
+            _ = pagina.mediabox
+            pagina.get_contents()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _leer_completo(key: str) -> bytes:
+    try:
+        resp = s3.get_object(Bucket=_bucket(), Key=key, ExpectedBucketOwner=_owner())
+    except s3.exceptions.ClientError:
+        return b""
+    return resp["Body"].read()
+
+
 def validar_pdf(key: str) -> bool:
-    """Verifica tamaño (<=20MB) y que el contenido real sea un PDF (firma %PDF-)."""
+    """Verifica tamaño (<=20MB) y que el contenido sea un PDF íntegro: firma %PDF-,
+    marca %%EOF, un objeto PDF y, por último, que el archivo se pueda abrir."""
     try:
         head = s3.head_object(
             Bucket=_bucket(),
@@ -106,8 +158,9 @@ def validar_pdf(key: str) -> bool:
     cuerpo = _leer_rango(key, "bytes=0-2047")
     if not _RE_OBJ_PDF.search(cuerpo):
         return False
-    
-    return True
+
+    datos = _leer_completo(key)
+    return bool(datos) and _pdf_legible(datos)
 
 
 def eliminar(key: str) -> None:
