@@ -1,0 +1,24 @@
+meta {
+  name: El plazo de archivado no se reinicia
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docEnviado}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("la fecha de atención no cambia", function () {
+    expect(res.body.atendido_en).to.equal(bru.getVar("atendidoEn"));
+  });
+  test("hay un solo envío en el historial", function () {
+    expect(res.body.historial.filter(h => h.accion === "envio_externo").length).to.equal(1);
+  });
+}

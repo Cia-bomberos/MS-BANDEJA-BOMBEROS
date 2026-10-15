@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     options {
-        buildDiscarder(logRotator(numToKeepStr: '5'))
+        buildDiscarder(logRotator(numToKeepStr: '1', artifactNumToKeepStr: '1'))
         disableConcurrentBuilds()
         timestamps()
         skipDefaultCheckout(true)
@@ -173,6 +173,39 @@ pipeline {
                             '''
                         }
                     }
+                }
+            }
+        }
+
+        stage('E2E (Bruno)') {
+            when { branch 'qa' }
+            steps {
+                withCredentials([file(credentialsId: 'BOMBEROS_BACKEND_E2E_QA', variable: 'E2E_ENV_FILE')]) {
+                    sh 'tr -d "\\r" < "$E2E_ENV_FILE" > e2e/.env'
+                }
+                script {
+                    docker.image('node:20').inside {
+                        withEnv([
+                            "NPM_CONFIG_PREFIX=${env.WORKSPACE}/.npm-global",
+                            "BRU=${env.WORKSPACE}/.npm-global/bin/bru",
+                            "E2E_ESPERAR_COMMIT=${env.GIT_COMMIT}"
+                        ]) {
+                            sh '''
+                                set -a
+                                . e2e/.env
+                                set +a
+                                npm install -g @usebruno/cli@4.2.1
+                                bash scripts/correr_e2e.sh qa
+                            '''
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    sh 'rm -f e2e/.env'
+                    junit allowEmptyResults: true, testResults: 'e2e/reportes/junit.xml'
+                    archiveArtifacts artifacts: 'e2e/reportes/**', allowEmptyArchive: true
                 }
             }
         }

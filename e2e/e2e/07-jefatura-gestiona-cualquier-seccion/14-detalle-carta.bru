@@ -1,0 +1,26 @@
+meta {
+  name: La Carta queda Atendida por la Jefatura
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docCarta}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("estado Atendido", function () {
+    expect(res.body.estado).to.equal("Atendido");
+  });
+  test("el envío lo registra un usuario distinto al que registró la Carta", function () {
+    const r = res.body.historial.find(h => h.accion === "registro");
+    const e = res.body.historial.find(h => h.accion === "envio_externo");
+    expect(e.usuario_sub).to.not.equal(r.usuario_sub);
+  });
+}

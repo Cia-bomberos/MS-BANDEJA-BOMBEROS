@@ -1,0 +1,21 @@
+meta {
+  name: Intentar marcarlo como atendido otra vez (409)
+  type: http
+  seq: 11
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{docCerrado}}/atender
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.status).to.equal(409);
+  });
+}

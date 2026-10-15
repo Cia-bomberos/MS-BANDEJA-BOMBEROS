@@ -1,0 +1,21 @@
+meta {
+  name: Máquinas cierra la gestión
+  type: http
+  seq: 11
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{docId}}/atender
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

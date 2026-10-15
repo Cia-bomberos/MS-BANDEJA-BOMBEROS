@@ -1,0 +1,24 @@
+meta {
+  name: Verificar que quedó Atendido sin pasar por En proceso
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("estado Atendido", function () {
+    expect(res.body.estado).to.equal("Atendido");
+  });
+  test("historial: registro y cierre, sin derivación", function () {
+    expect(res.body.historial.map(h => h.accion)).to.deep.equal(["registro", "atendido"]);
+  });
+}

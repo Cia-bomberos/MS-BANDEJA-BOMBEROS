@@ -16,6 +16,7 @@ Uso:
 
 import argparse
 import json
+import os
 
 import boto3
 
@@ -49,6 +50,7 @@ def main():
         "stage": args.stage,
         "apiUrl": api_url,
         "documentsBucket": documents_bucket,
+        "commit": os.environ.get("GITHUB_SHA", ""),
     }
 
     config_bucket = f"{CONFIG_BUCKET_PREFIX}-{args.stage}"

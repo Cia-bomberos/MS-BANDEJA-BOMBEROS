@@ -1,0 +1,25 @@
+meta {
+  name: Guardar la fecha de atención
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docEnviado}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+script:post-response {
+  bru.setVar("atendidoEn", res.body.atendido_en);
+}
+
+tests {
+  test("queda Atendido", function () {
+    expect(res.body.estado).to.equal("Atendido");
+  });
+}
