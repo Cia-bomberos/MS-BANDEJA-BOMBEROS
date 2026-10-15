@@ -90,7 +90,6 @@ def test_reclasificacion_horaria(bd, registrar, consulta):
     assert scheduled.reclasificar_prioridades({}, None) == {"actualizados": 1}
     assert consulta("SELECT prioridad FROM documentos WHERE id = %s", (doc["id"],))[0]["prioridad"] == "Alta"
 
-
 def test_archivado_automatico_y_eliminacion(bd, registrar, llamar, consulta, monkeypatch):
     doc = registrar()
     assert llamar(handler.marcar_atendido, "Jefe_Maquinas", id=doc["id"])[0] == 200
