@@ -4,3 +4,5 @@
 psycopg2-binary==2.9.*
 # Integracion con Google Drive (RN-0027): ver modulo_documentos/drive.py
 requests>=2.31,<3
+# Validación del contenido de los PDF subidos (RNF-0007): modulo_documentos/s3util.py
+pypdf>=5,<7

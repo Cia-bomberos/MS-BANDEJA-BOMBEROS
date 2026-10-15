@@ -1,0 +1,21 @@
+meta {
+  name: Administración consulta el detalle
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

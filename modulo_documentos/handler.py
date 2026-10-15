@@ -15,8 +15,6 @@ Pendiente / fuera de alcance de esta primera versión (ver README):
 import json
 from datetime import date, datetime
 
-from botocore.exceptions import ClientError
-
 from modulo_documentos import auth, s3util
 from modulo_documentos.codigo import formatear_codigo
 from modulo_documentos.db import get_connection, siguiente_correlativo
@@ -271,11 +269,22 @@ def derivar_documento(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            seccion_actual = _obtener_seccion_doc(cur, documento_id)
-            if seccion_actual is None:
+            cur.execute(
+                "SELECT seccion_responsable, estado, modalidad FROM documentos WHERE id = %s",
+                (documento_id,),
+            )
+            doc = cur.fetchone()
+            if not doc:
                 return _respuesta(404, {"error": "Documento no encontrado."})
+            seccion_actual = doc["seccion_responsable"]
             if not auth.puede_escribir(event, seccion_actual):
                 return _respuesta(403, {"error": "No tiene permiso para derivar este documento."})
+            # RN-0024/RN-0025: el documento externo (modalidad simplificada) no se deriva.
+            if doc.get("modalidad") == "simplificado":
+                return _respuesta(409, {"error": "Un documento externo no puede derivarse."})
+            # Un documento ya atendido (o archivado) tiene la gestión cerrada.
+            if doc.get("estado") in ("Atendido", "Archivado"):
+                return _respuesta(409, {"error": f"No se puede derivar un documento en estado '{doc['estado']}'."})
             if seccion_destino == seccion_actual:
                 return _respuesta(400, {"error": "El documento ya está en esa sección."})
 
@@ -495,6 +504,15 @@ def registrar_envio_externo(event, context):
                 return _respuesta(409, {"error": "El documento ya está Archivado."})
             if not auth.puede_escribir(event, doc["seccion_responsable"]):
                 return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+            if doc["estado"] == "Atendido":
+                return _respuesta(409, {"error": "El documento ya está Atendido; no se puede registrar otro envío externo."})
+
+            cur.execute(
+                "SELECT 1 FROM historial_acciones WHERE documento_id = %s AND accion = 'descarga' AND usuario_sub = %s LIMIT 1",
+                (documento_id, auth.usuario_sub(event)),
+            )
+            if cur.fetchone() is None:
+                return _respuesta(409, {"error": "Debe descargar el documento antes de registrar su envío externo."})
 
             cur.execute(
                 "SELECT 1 FROM historial_acciones WHERE documento_id = %s AND accion = 'descarga' AND usuario_sub = %s LIMIT 1",

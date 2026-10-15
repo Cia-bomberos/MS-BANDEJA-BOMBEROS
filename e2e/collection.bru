@@ -1,0 +1,11 @@
+script:pre-request {
+  // Datos comunes de todas las peticiones.
+  // Fecha límite: hoy en Lima + 20 días (prioridad automática Media).
+  const lima = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  lima.setUTCDate(lima.getUTCDate() + 20);
+  bru.setVar("fechaLimite", lima.toISOString().slice(0, 10));
+  // PDF de una página con estructura completa (tabla de referencias incluida),
+  // enviado como texto: el backend lo abre y valida (RNF-0007).
+  bru.setVar("pdfMinimo", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 75 >>\nstream\nBT /F1 18 Tf 72 720 Td (Documento de prueba E2E - Bandeja Documental) Tj ET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000241 00000 n \n0000000366 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n436\n%%EOF\n");
+  bru.setVar("pdfVersion2", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 78 >>\nstream\nBT /F1 18 Tf 72 720 Td (Documento de prueba E2E - version 2 del adjunto) Tj ET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000241 00000 n \n0000000369 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n439\n%%EOF\n");
+}

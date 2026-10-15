@@ -1,0 +1,21 @@
+meta {
+  name: Marcar el Oficio como atendido
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{docCerrado}}/atender
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -1,0 +1,28 @@
+meta {
+  name: La Jefatura deriva el Informe a Servicio General
+  type: http
+  seq: 11
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{docId}}/derivar
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+body:json {
+  { "seccion_destino": "ServicioGeneral" }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("la sección responsable pasa a ServicioGeneral", function () {
+    expect(res.body.seccion_responsable).to.equal("ServicioGeneral");
+  });
+}
