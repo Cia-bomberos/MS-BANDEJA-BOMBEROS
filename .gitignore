@@ -10,6 +10,8 @@ venv/
 .sonar/
 node_modules/
 .serverless/
+e2e/.env
+e2e/reportes/
 
 # Credenciales de Google Drive: NUNCA al repo
 google-oauth.json

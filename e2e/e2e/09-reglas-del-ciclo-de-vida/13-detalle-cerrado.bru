@@ -1,0 +1,24 @@
+meta {
+  name: El documento sigue Atendido en Máquinas
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docCerrado}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("sigue Atendido", function () {
+    expect(res.body.estado).to.equal("Atendido");
+  });
+  test("sigue a cargo de Máquinas", function () {
+    expect(res.body.seccion_responsable).to.equal("Maquinas");
+  });
+}

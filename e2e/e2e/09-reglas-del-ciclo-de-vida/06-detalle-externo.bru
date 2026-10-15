@@ -1,0 +1,24 @@
+meta {
+  name: El documento externo sigue Pendiente en Máquinas
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docExt}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("sigue en Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("sigue a cargo de Máquinas", function () {
+    expect(res.body.seccion_responsable).to.equal("Maquinas");
+  });
+}

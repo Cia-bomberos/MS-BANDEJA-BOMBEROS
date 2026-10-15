@@ -408,3 +408,39 @@ class TestErroresInesperados:
         _, cur = conn_mock
         cur.fetchone.return_value = None
         assert handler.eliminar_documento(_event("Jefe_Administracion", ID), None)["statusCode"] == 404
+
+
+class TestBugsDerivacionYEnvio:
+    def test_no_se_deriva_documento_externo(self, conn_mock):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Pendiente", "modalidad": "simplificado"}
+        r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
+        assert r["statusCode"] == 409
+        conn.commit.assert_not_called()
+
+    @pytest.mark.parametrize("estado", ["Atendido", "Archivado"])
+    def test_no_se_deriva_documento_cerrado(self, conn_mock, estado):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": estado, "modalidad": "completo"}
+        r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
+        assert r["statusCode"] == 409
+        conn.commit.assert_not_called()
+
+    def test_derivar_externo_sin_permiso_es_403_antes_que_409(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Sanidad", "estado": "Atendido", "modalidad": "simplificado"}
+        r = handler.derivar_documento(_event("Jefe_Maquinas", ID, body={"seccion_destino": "Administracion"}), None)
+        assert r["statusCode"] == 403
+
+    def test_derivar_documento_interno_en_proceso_sigue_ok(self, conn_mock):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "En proceso", "modalidad": "completo"}
+        r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
+        assert r["statusCode"] == 200
+
+    def test_no_se_registra_envio_externo_de_documento_atendido(self, conn_mock):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Atendido"}
+        r = handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=ENVIO), None)
+        assert r["statusCode"] == 409
+        conn.commit.assert_not_called()

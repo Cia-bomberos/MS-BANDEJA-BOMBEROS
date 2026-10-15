@@ -1,0 +1,39 @@
+meta {
+  name: Registrar Oficio interno
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+body:json {
+  { "origen": "interno", "tipo": "Oficio", "fecha_limite": "{{fechaLimite}}", "archivo_s3_key": "{{archivoKey}}" }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("docSG", res.body.id);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("genera el código institucional del Oficio", function () {
+    expect(res.body.codigo_unico).to.match(/^OFICIO N° \d{3}-\d{4}\/CGBVP\/IVCDLC\/B3$/);
+  });
+  test("el correlativo continúa la numeración de la Compañía (+1)", function () {
+    const m = String(res.body.codigo_unico).match(/N° (\d+)-/);
+    expect(parseInt(m[1], 10)).to.equal(Number(bru.getVar("numAdm")) + 1);
+  });
+}

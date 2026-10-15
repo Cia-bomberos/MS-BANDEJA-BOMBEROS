@@ -67,6 +67,8 @@ functions:
 
   crearDocumento:
     handler: modulo_documentos/handler.crear_documento
+    timeout: 30
+    memorySize: 512
     events:
       - http:
           path: documentos
@@ -103,6 +105,8 @@ functions:
 
   actualizarArchivo:
     handler: modulo_documentos/handler.actualizar_archivo
+    timeout: 30
+    memorySize: 512
     events:
       - http:
           path: documentos/{id}/archivo

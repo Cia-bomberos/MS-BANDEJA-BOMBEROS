@@ -1,0 +1,33 @@
+meta {
+  name: Máquinas recibe el documento
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("el documento aparece en la bandeja", function () {
+    const doc = res.body.documentos.find(d => d.id === bru.getVar("docId"));
+    expect(doc, "documento en la bandeja").to.exist;
+  });
+  test("sigue En proceso", function () {
+    const doc = res.body.documentos.find(d => d.id === bru.getVar("docId"));
+    expect(doc.estado).to.equal("En proceso");
+  });
+  test("Máquinas puede gestionarlo", function () {
+    const doc = res.body.documentos.find(d => d.id === bru.getVar("docId"));
+    expect(doc.solo_lectura).to.equal(false);
+  });
+}
