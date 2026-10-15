@@ -186,3 +186,10 @@ mockean: los tests no tocan servicios reales. Ejecutar con
    (denormalizado), porque no existe ningún mecanismo que sincronice usuarios
    de Cognito hacia RDS. Si se necesita hacer JOIN contra usuarios reales, hay
    que decidir primero cómo sincronizarlos.
+
+## Validación de PDFs subidos
+Antes de promover `pendientes/` → `documentos/`, `validar_pdf` comprueba tamaño (100 B–20 MB), cabecera `%PDF-`, `%%EOF` al final, objetos PDF y, además, **parsea el archivo completo con `pypdf`** (estricto; solo se tolera un xref dañado con lectura reparadora). Un archivo corrupto, truncado o un texto renombrado a `.pdf` se rechaza con 400 y se borra de S3. Los PDF cifrados se aceptan. Dependencia: `pypdf` (requirements.txt).
+
+## Reglas de derivación y envío externo (QA)
+- `PATCH /documentos/{id}/derivar` devuelve **409** si el documento es externo (modalidad simplificada) o si su estado es `Atendido`/`Archivado`.
+- `POST /documentos/{id}/envio-externo` devuelve **409** si el documento ya está `Atendido` o `Archivado`.
