@@ -3,8 +3,4 @@ pytest-cov==4.1.0
 boto3==1.34.*
 psycopg2-binary==2.9.*
 requests>=2.31,<3
-<<<<<<< HEAD
 moto[s3]>=5,<6
-=======
-pypdf>=5,<7
->>>>>>> 4995e6fee9cc3373323553c53e4a8259527eff27
