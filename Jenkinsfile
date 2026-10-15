@@ -184,7 +184,7 @@ pipeline {
                     sh 'tr -d "\\r" < "$E2E_ENV_FILE" > e2e/.env'
                 }
                 script {
-                    def sha = sh(script: 'git rev-parse HEAD', returnStdout: true)
+                    def sha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     docker.image('node:20').inside {
                         withEnv([
                             "NPM_CONFIG_PREFIX=${env.WORKSPACE}/.npm-global",
