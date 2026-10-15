@@ -15,8 +15,6 @@ Pendiente / fuera de alcance de esta primera versión (ver README):
 import json
 from datetime import date, datetime
 
-from botocore.exceptions import ClientError
-
 from modulo_documentos import auth, s3util
 from modulo_documentos.codigo import formatear_codigo
 from modulo_documentos.db import get_connection, siguiente_correlativo

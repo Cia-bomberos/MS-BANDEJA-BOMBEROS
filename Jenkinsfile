@@ -153,6 +153,30 @@ pipeline {
             steps { executeServerlessDeploy('qa') }
         }
 
+        stage('Integration Test') {
+            when { branch 'qa' }
+            steps {
+                script {
+                    docker.image('postgres:16').withRun('-e POSTGRES_PASSWORD=test -e POSTGRES_DB=bandeja_test') { db ->
+                        docker.image('python:3.11-slim').inside("--link ${db.id}:db") {
+                            sh '''
+                            python -m venv venv
+                            . venv/bin/activate
+                            pip install --no-cache-dir -r requirements-dev.txt
+                            for i in $(seq 1 30); do
+                                python -c "import psycopg2; psycopg2.connect(host='db', dbname='bandeja_test', user='postgres', password='test').close()" 2>/dev/null && break
+                                sleep 1
+                            done
+                            TEST_DB_HOST=db TEST_DB_NAME=bandeja_test \
+                            TEST_DB_USER=postgres TEST_DB_PASSWORD=test \
+                                pytest -m integration -v
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Deploy UAT') {
             when {
                 allOf { branch 'uat'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
