@@ -21,6 +21,7 @@ leer_json() {
 
 # Jenkins corre en paralelo a GitHub Actions: se espera a que el deploy de ESTE
 # commit este publicado para no probar la version anterior del API.
+case "${E2E_ESPERAR_COMMIT:-}" in null|undefined) E2E_ESPERAR_COMMIT="" ;; esac
 if [ -n "${E2E_ESPERAR_COMMIT:-}" ]; then
   ACTUAL=""
   for _ in $(seq 1 60); do

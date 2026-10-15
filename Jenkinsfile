@@ -153,7 +153,7 @@ pipeline {
             steps { executeServerlessDeploy('qa') }
         }
 
-        stage('Integration Test') {
+        stage('Integration Tests') {
             when { branch 'qa' }
             steps {
                 script {
@@ -177,18 +177,19 @@ pipeline {
             }
         }
 
-        stage('E2E (Bruno)') {
+        stage('E2E Tests') {
             when { branch 'qa' }
             steps {
                 withCredentials([file(credentialsId: 'BOMBEROS_BACKEND_E2E_QA', variable: 'E2E_ENV_FILE')]) {
                     sh 'tr -d "\\r" < "$E2E_ENV_FILE" > e2e/.env'
                 }
                 script {
+                    def sha = sh(script: 'git rev-parse HEAD', returnStdout: true)
                     docker.image('node:20').inside {
                         withEnv([
                             "NPM_CONFIG_PREFIX=${env.WORKSPACE}/.npm-global",
                             "BRU=${env.WORKSPACE}/.npm-global/bin/bru",
-                            "E2E_ESPERAR_COMMIT=${env.GIT_COMMIT}"
+                            "E2E_ESPERAR_COMMIT=${sha}"
                         ]) {
                             sh '''
                                 set -a
