@@ -29,6 +29,15 @@ logger = logging.getLogger(__name__)
 PREFIJO_PENDIENTES = "pendientes/"
 PREFIJO_DOCUMENTOS = "documentos/"
 
+logger = logging.getLogger(__name__)
+
+# Las subidas llegan primero a "pendientes/" (con expiración automática de 1 día,
+# ver serverless.yml). Solo al registrar/reemplazar con un PDF válido el archivo
+# se mueve a "documentos/". Así, lo que se sube y nunca se registra (o se rechaza)
+# no se acumula en el bucket.
+PREFIJO_PENDIENTES = "pendientes/"
+PREFIJO_DOCUMENTOS = "documentos/"
+
 s3 = boto3.client("s3")
 
 

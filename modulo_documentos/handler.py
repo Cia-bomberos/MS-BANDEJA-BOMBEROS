@@ -515,6 +515,13 @@ def registrar_envio_externo(event, context):
                 return _respuesta(409, {"error": "Debe descargar el documento antes de registrar su envío externo."})
 
             cur.execute(
+                "SELECT 1 FROM historial_acciones WHERE documento_id = %s AND accion = 'descarga' AND usuario_sub = %s LIMIT 1",
+                (documento_id, auth.usuario_sub(event)),
+            )
+            if cur.fetchone() is None:
+                return _respuesta(409, {"error": "Debe descargar el documento antes de registrar su envío externo."})
+
+            cur.execute(
                 "UPDATE documentos SET estado = 'Atendido', atendido_en = now(), fecha_actualizacion = now() WHERE id = %s",
                 (documento_id,),
             )
