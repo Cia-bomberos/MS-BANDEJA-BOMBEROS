@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS documentos (
     fecha_actualizacion  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE documentos
+  ADD COLUMN IF NOT EXISTS asunto VARCHAR(500),
+
 CREATE TABLE IF NOT EXISTS historial_acciones (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     documento_id   UUID NOT NULL REFERENCES documentos(id),

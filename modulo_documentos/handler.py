@@ -113,6 +113,10 @@ def crear_documento(event, context):
     tipo = body.get("tipo")
     prioridad_body = body.get("prioridad")
 
+    asunto = (body.get("asunto") or "").strip()
+    if not asunto:
+        return _respuesta(400, {"error": "asunto es obligatorio."})
+
     if origen not in ("interno", "externo"):
         return _respuesta(400, {"error": "origen debe ser 'interno' o 'externo'."})
     if not archivo_s3_key or not fecha_limite_str:
@@ -152,11 +156,12 @@ def crear_documento(event, context):
             cur.execute(
                 """
                 INSERT INTO documentos (codigo_unico, tipo, modalidad, estado, prioridad, prioridad_manual,
-                                         seccion_origen, seccion_responsable, fecha_limite, archivo_s3_key)
-                VALUES (%s, %s, %s, 'Pendiente', %s, %s, %s, %s, %s, %s)
-                RETURNING id, codigo_unico, tipo, modalidad, estado, prioridad, fecha_limite, fecha_creacion
+                                         seccion_origen, seccion_responsable, fecha_limite, archivo_s3_key, asunto)
+                VALUES (%s, %s, %s, 'Pendiente', %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, codigo_unico, tipo, modalidad, estado, prioridad, fecha_limite, fecha_creacion, asunto
                 """,
-                (codigo_unico, tipo, modalidad, prioridad, prioridad_manual, seccion, seccion, fecha_limite, archivo_s3_key),
+                (codigo_unico, tipo, modalidad, prioridad, prioridad_manual, seccion, seccion, 
+                 fecha_limite, archivo_s3_key, asunto),
             )
             doc = cur.fetchone()
             _registrar_historial(cur, doc["id"], event, "registro", f"Documento registrado ({modalidad}).")
