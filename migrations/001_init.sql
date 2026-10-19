@@ -22,14 +22,12 @@ CREATE TABLE IF NOT EXISTS documentos (
                              CHECK (seccion_responsable IN ('Administracion', 'ServicioGeneral', 'Maquinas', 'Sanidad')),
     fecha_limite         DATE NOT NULL,
     archivo_s3_key       VARCHAR(500) NOT NULL,
+    asunto               VARCHAR(500),
     confirmado_drive     BOOLEAN NOT NULL DEFAULT false,       -- RN-0027/RNF-0009
     atendido_en          TIMESTAMPTZ,                          -- usado para calcular los 3 días de RN-0026
     fecha_creacion       TIMESTAMPTZ NOT NULL DEFAULT now(),
     fecha_actualizacion  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-ALTER TABLE documentos
-  ADD COLUMN IF NOT EXISTS asunto VARCHAR(500),
 
 CREATE TABLE IF NOT EXISTS historial_acciones (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),

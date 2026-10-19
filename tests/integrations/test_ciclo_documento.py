@@ -18,7 +18,7 @@ def registrar(llamar, subir):
         status, doc = llamar(handler.crear_documento, grupo, body={
             "origen": "interno", "tipo": TIPO,
             "fecha_limite": (hoy_lima() + timedelta(days=dias)).isoformat(),
-            "archivo_s3_key": subir(contenido),
+            "archivo_s3_key": subir(contenido), "asunto": "prueba"
         })
         assert status == 201, doc
         return doc
