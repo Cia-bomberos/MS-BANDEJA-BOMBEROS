@@ -92,7 +92,7 @@ class TestCrearDocumento:
             "fecha_limite": tiempo.hoy_lima() + timedelta(days=20), "fecha_creacion": "2026-01-01T00:00:00",
         }
         body = {"origen": "externo", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20)), "asunto": "test"}
         event = _event(grupo="Jefe_Sanidad", body=body)
 
         resp = handler.crear_documento(event, None)
@@ -102,7 +102,7 @@ class TestCrearDocumento:
 
     def test_interno_sin_tipo_es_invalido(self, conn_mock):
         body = {"origen": "interno", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20)), "asunto": "test"}
         event = _event(grupo="Jefe_Sanidad", body=body)
         resp = handler.crear_documento(event, None)
         assert resp["statusCode"] == 400
@@ -115,7 +115,7 @@ class TestCrearDocumento:
             "fecha_limite": tiempo.hoy_lima() + timedelta(days=20), "fecha_creacion": "2026-01-01T00:00:00",
         }
         body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "documentos/x.pdf",
-                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20)), "asunto": "test"}
         event = _event(grupo="Jefe_Maquinas", body=body)
 
         resp = handler.crear_documento(event, None)
@@ -146,7 +146,7 @@ class TestCrearDocumento:
         cursor.fetchone.return_value = {"id": "d", "codigo_unico": None, "tipo": None, "modalidad": "simplificado",
                                         "estado": "Pendiente", "prioridad": "Media",
                                         "fecha_limite": tiempo.hoy_lima(), "fecha_creacion": "x"}
-        body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
+        body = {"asunto": "documentos/x.pdf", "origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
                 "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
         handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
         insert = [c for c in cursor.execute.call_args_list if "INSERT INTO documentos" in c.args[0]][0]
@@ -156,7 +156,7 @@ class TestCrearDocumento:
         conn, cursor = conn_mock
         cursor.execute.side_effect = RuntimeError("BD caida")
         body = {"origen": "externo", "archivo_s3_key": "pendientes/x.pdf",
-                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20))}
+                "fecha_limite": str(tiempo.hoy_lima() + timedelta(days=20)), "asunto": "test"}
         resp = handler.crear_documento(_event(grupo="Jefe_Sanidad", body=body), None)
         assert resp["statusCode"] == 500
         conn.rollback.assert_called_once()
@@ -174,7 +174,7 @@ class TestCrearDocumento:
         cursor.fetchone.return_value = {"id": "d", "codigo_unico": "x", "tipo": "oficio", "modalidad": "completo",
                                         "estado": "Pendiente", "prioridad": "Media",
                                         "fecha_limite": date.today(), "fecha_creacion": "x"}
-        body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "pendientes/x.pdf", "fecha_limite": "2027-03-01"}
+        body = {"origen": "interno", "tipo": "oficio", "archivo_s3_key": "pendientes/x.pdf", "fecha_limite": "2027-03-01", "asunto": "test"}
         handler.crear_documento(_event(grupo="Jefe_Maquinas", body=body), None)
         assert anios == [2026]
 
