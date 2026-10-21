@@ -97,6 +97,42 @@ def solicitar_url_subida(event, context):
 # POST /documentos
 # ---------------------------------------------------------------------------
 
+def _validar_datos_creacion(body):
+    origen = body.get("origen")  # "interno" | "externo" (RN-0024)
+    archivo_s3_key = body.get("archivo_s3_key")
+    fecha_limite_str = body.get("fecha_limite")
+    tipo = body.get("tipo")
+    prioridad_body = body.get("prioridad")
+    asunto = (body.get("asunto") or "").strip()
+
+    if not asunto:
+        return _respuesta(400, {"error": "asunto es obligatorio."}), None
+    if origen not in ("interno", "externo"):
+        return _respuesta(400, {"error": "origen debe ser 'interno' o 'externo'."}), None
+    if not archivo_s3_key or not fecha_limite_str:
+        return _respuesta(400, {"error": "archivo_s3_key y fecha_limite son obligatorios."}), None
+
+    try:
+        fecha_limite = date.fromisoformat(fecha_limite_str)
+    except ValueError:
+        return _respuesta(400, {"error": "fecha_limite debe tener formato YYYY-MM-DD."}), None
+
+    modalidad = "simplificado" if origen == "externo" else "completo"
+    if modalidad == "completo" and not tipo:
+        return _respuesta(400, {"error": "tipo es obligatorio para documentos internos (RN-0024)."}), None
+    if modalidad == "simplificado":
+        tipo = None
+
+    return None, {
+        "archivo_s3_key": archivo_s3_key,
+        "fecha_limite": fecha_limite,
+        "tipo": tipo,
+        "prioridad_body": prioridad_body,
+        "asunto": asunto,
+        "modalidad": modalidad,
+    }
+
+
 def crear_documento(event, context):
     """RN-0007, RN-0013, RN-0014, RN-0020, RN-0024, RN-0025, RF-0004, RF-0008."""
     if auth.es_jefatura(event):
@@ -107,33 +143,15 @@ def crear_documento(event, context):
         return _respuesta(403, {"error": "Rol no autorizado para registrar documentos."})
 
     body = json.loads(event.get("body") or "{}")
-    origen = body.get("origen")  # "interno" | "externo" (RN-0024)
-    archivo_s3_key = body.get("archivo_s3_key")
-    fecha_limite_str = body.get("fecha_limite")
-    tipo = body.get("tipo")
-    prioridad_body = body.get("prioridad")
-
-    asunto = (body.get("asunto") or "").strip()
-    if not asunto:
-        return _respuesta(400, {"error": "asunto es obligatorio."})
-
-    if origen not in ("interno", "externo"):
-        return _respuesta(400, {"error": "origen debe ser 'interno' o 'externo'."})
-    if not archivo_s3_key or not fecha_limite_str:
-        return _respuesta(400, {"error": "archivo_s3_key y fecha_limite son obligatorios."})
-
-    try:
-        fecha_limite = date.fromisoformat(fecha_limite_str)
-    except ValueError:
-        return _respuesta(400, {"error": "fecha_limite debe tener formato YYYY-MM-DD."})
-
-    # RN-0024: simplificado para documentos externos, completo para internos.
-    modalidad = "simplificado" if origen == "externo" else "completo"
-    if modalidad == "completo" and not tipo:
-        return _respuesta(400, {"error": "tipo es obligatorio para documentos internos (RN-0024)."})
-    # RN-0025: simplificado exige prioridad/fecha, nunca código ni tipo.
-    if modalidad == "simplificado":
-        tipo = None
+    error, datos = _validar_datos_creacion(body)
+    if error:
+        return error
+    archivo_s3_key = datos["archivo_s3_key"]
+    fecha_limite = datos["fecha_limite"]
+    tipo = datos["tipo"]
+    prioridad_body = datos["prioridad_body"]
+    asunto = datos["asunto"]
+    modalidad = datos["modalidad"]
 
     # RNF-0006/0007: recién ahora se valida el archivo subido; si no es un PDF de
     # hasta 20MB se elimina de S3 y se rechaza el registro.
