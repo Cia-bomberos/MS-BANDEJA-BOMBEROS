@@ -10,7 +10,7 @@ pipeline {
 
     // Credenciales dinámicas de AWS Learner Lab (rotan periódicamente) y de
     // la BD propia del equipo (mismo .env que se le pasa a Nico). Todas
-    // opcionales: sin credenciales de AWS el deploy se omite y solo corren
+    // opcionales: sin credenciales de AWS el deploy se omite y solo corren.
     // tests + SonarQube (igual que en MS-SEGURIDAD-BOMBEROS).
     parameters {
         string(name: 'AWS_ACCESS_KEY_ID', defaultValue: '', description: 'Access Key de AWS Learner Lab')
