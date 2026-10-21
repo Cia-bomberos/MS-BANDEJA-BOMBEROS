@@ -1,0 +1,354 @@
+openapi: 3.0.3
+info:
+  title: MS-BANDEJA-BOMBEROS
+  version: 1.0.0
+  description: >-
+    API de la Bandeja Documental (Lambdas detras de API Gateway). Especificacion
+    usada por OWASP ZAP; el pipeline reemplaza __API_URL__ por la URL real del stage.
+servers:
+  - url: __API_URL__
+security:
+  - cognito: []
+
+paths:
+  /documentos/upload-url:
+    post:
+      operationId: solicitarUrlSubida
+      summary: URL pre-firmada para subir un PDF a S3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tamano_bytes:
+                  type: integer
+                  minimum: 1
+                  maximum: 20971520
+                  example: 1024
+      responses:
+        "200":
+          description: URL de subida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadUrl: { type: string }
+                  archivo_s3_key: { type: string }
+                  expiraEn: { type: integer }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+
+  /documentos:
+    post:
+      operationId: crearDocumento
+      summary: Registra un documento (interno o externo)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origen, archivo_s3_key, fecha_limite, asunto]
+              properties:
+                origen: { type: string, enum: [interno, externo], example: interno }
+                tipo: { type: string, example: Nota Informativa }
+                asunto: { type: string, example: Asunto de prueba }
+                fecha_limite: { type: string, format: date, example: "2030-12-31" }
+                prioridad: { type: string, enum: [Alta, Media, Baja] }
+                archivo_s3_key:
+                  type: string
+                  example: pendientes/00000000-0000-4000-8000-000000000000.pdf
+      responses:
+        "201":
+          description: Documento registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Documento" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    get:
+      operationId: listarDocumentos
+      summary: Lista los documentos visibles para el usuario
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Pendiente, En proceso, Atendido, Archivado]
+      responses:
+        "200":
+          description: Lista de documentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentos:
+                    type: array
+                    items: { $ref: "#/components/schemas/Documento" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /documentos/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    get:
+      operationId: obtenerDocumento
+      summary: Detalle del documento con su historial
+      responses:
+        "200":
+          description: Detalle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Documento" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+    delete:
+      operationId: eliminarDocumento
+      summary: Elimina un documento archivado (solo Jefe de Administracion)
+      responses:
+        "200":
+          description: Eliminado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mensaje" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /documentos/{id}/derivar:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    patch:
+      operationId: derivarDocumento
+      summary: Deriva el documento a otra seccion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [seccion_destino]
+              properties:
+                seccion_destino:
+                  type: string
+                  enum: [Administracion, ServicioGeneral, Maquinas, Sanidad]
+      responses:
+        "200":
+          description: Derivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mensaje" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /documentos/{id}/archivo:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    patch:
+      operationId: actualizarArchivo
+      summary: Reemplaza el PDF adjunto (solo En proceso)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [archivo_s3_key]
+              properties:
+                archivo_s3_key:
+                  type: string
+                  example: pendientes/00000000-0000-4000-8000-000000000000.pdf
+      responses:
+        "200":
+          description: Archivo actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mensaje" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /documentos/{id}/atender:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    patch:
+      operationId: marcarAtendido
+      summary: Marca el documento como Atendido
+      responses:
+        "200":
+          description: Atendido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mensaje" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /documentos/{id}/prioridad:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    patch:
+      operationId: asignarPrioridad
+      summary: Asigna prioridad y/o fecha limite (solo Pendiente)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prioridad: { type: string, enum: [Alta, Media, Baja] }
+                fecha_limite: { type: string, format: date, example: "2030-12-31" }
+      responses:
+        "200":
+          description: Actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mensaje" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /documentos/{id}/envio-externo:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    post:
+      operationId: registrarEnvioExterno
+      summary: Registra el envio a una entidad externa (cierra como Atendido)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [medio, destinatario]
+              properties:
+                medio: { type: string, example: Correo institucional }
+                destinatario: { type: string, example: Municipalidad de Lima }
+                fecha_envio: { type: string, format: date, example: "2026-01-15" }
+                hora_envio: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', example: "14:30" }
+      responses:
+        "200":
+          description: Envio registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Mensaje" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /documentos/{id}/descargar:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    get:
+      operationId: descargarDocumento
+      summary: URL pre-firmada para descargar el PDF (queda en el historial)
+      responses:
+        "200":
+          description: URL de descarga
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downloadUrl: { type: string }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+components:
+  securitySchemes:
+    cognito:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: IdToken de Cognito, sin prefijo Bearer.
+
+  parameters:
+    DocumentoId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 00000000-0000-4000-8000-000000000000
+
+  responses:
+    SolicitudInvalida:
+      description: Solicitud invalida
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoAutenticado:
+      description: Token ausente o invalido (lo responde API Gateway)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+    SinPermiso:
+      description: Sin permiso para esta operacion o seccion
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoEncontrado:
+      description: Documento no encontrado
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflicto:
+      description: Operacion no permitida en el estado actual
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    Mensaje:
+      type: object
+      properties:
+        mensaje: { type: string }
+    Documento:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        codigo_unico: { type: string, nullable: true }
+        tipo: { type: string, nullable: true }
+        modalidad: { type: string, enum: [completo, simplificado] }
+        estado: { type: string, enum: [Pendiente, En proceso, Atendido, Archivado] }
+        prioridad: { type: string, enum: [Alta, Media, Baja] }
+        asunto: { type: string }
+        fecha_limite: { type: string, format: date }
+        seccion_responsable: { type: string }
+        vencido: { type: boolean }
+        solo_lectura: { type: boolean }
+        historial:
+          type: array
+          items:
+            type: object
+            properties:
+              accion: { type: string }
+              detalle: { type: string, nullable: true }
+              fecha_hora: { type: string }

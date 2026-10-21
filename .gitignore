@@ -12,6 +12,8 @@ node_modules/
 .serverless/
 e2e/.env
 e2e/reportes/
+zap-reports/
+zap-work/
 
 # Credenciales de Google Drive: NUNCA al repo
 google-oauth.json

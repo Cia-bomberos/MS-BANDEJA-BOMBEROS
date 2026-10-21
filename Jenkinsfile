@@ -211,6 +211,46 @@ pipeline {
             }
         }
 
+                stage('OWASP ZAP - Backend') {
+            when { branch 'qa' }
+            steps {
+                // Fase 1: preparar (necesita node + curl). Corre en node:20,
+                // igual que las E2E, y deja el token y el OpenAPI en zap-work/.
+                docker.image('node:20').inside {
+                    withCredentials([file(credentialsId: 'BOMBEROS_BACKEND_E2E_QA', variable: 'E2E_ENV_FILE')]) {
+                        sh 'tr -d "\\r" < "$E2E_ENV_FILE" > e2e/.env'
+                    }
+                    sh '''
+                        set -a
+                        . e2e/.env
+                        set +a
+                        rm -f e2e/.env
+                        bash scripts/correr_zap_backend.sh preparar qa
+                    '''
+                }
+                // Fase 2: escanear (necesita docker). Corre en el agente, que
+                // ya tiene Docker (lo usan las E2E y las Integration Tests).
+                script {
+                    def status = sh(
+                        script: 'bash scripts/correr_zap_backend.sh escanear',
+                        returnStatus: true
+                    )
+                    if (status == 1) {
+                        error('ZAP Backend: reglas de seguridad incumplidas (FAIL)')
+                    } else if (status == 2) {
+                        unstable('ZAP Backend: advertencias detectadas (WARN)')
+                    } else if (status != 0) {
+                        error("ZAP Backend: error de ejecucion (${status})")
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'zap-reports/**', allowEmptyArchive: true
+                }
+            }
+        }
+
         stage('Deploy UAT') {
             when {
                 allOf { branch 'uat'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
@@ -223,6 +263,11 @@ pipeline {
                 allOf { branch 'main'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
             }
             steps { executeServerlessDeploy('prod') }
+        }
+    }
+    post {
+        always {
+            deleteDir();
         }
     }
 }
