@@ -42,6 +42,7 @@ pipeline {
             }
             steps {
                 sh '''
+                    rm -rf venv
                     python -m venv venv
                     . venv/bin/activate
                     pip install --no-cache-dir -r requirements-dev.txt
