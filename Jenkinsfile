@@ -215,7 +215,7 @@ pipeline {
             when { branch 'qa' }
             steps {
                 script{
-                    // Fase 1: preparar (necesita node + curl). Corre en node:20,
+                    // Fase 1: preparar (necesita node + curl). Corre en node:20,-
                     // igual que las E2E, y deja el token y el OpenAPI en zap-work/.
                     docker.image('node:20').inside {
                         withCredentials([file(credentialsId: 'BOMBEROS_BACKEND_E2E_QA', variable: 'E2E_ENV_FILE')]) {
