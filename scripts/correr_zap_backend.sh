@@ -86,23 +86,25 @@ preparar() {
 }
 
 escanear() {
-  export MSYS_NO_PATHCONV=1   # Git Bash en Windows: no reescribir rutas como /zap/wrk/
+  export MSYS_NO_PATHCONV=1
   [ -s zap-work/token ] || { echo "Falta zap-work/token: corre antes la fase 'preparar'." >&2; exit 64; }
-
-  NOMBRE="zap-backend-$$"
-  trap 'rm -rf zap-work; docker rm -f "$NOMBRE" >/dev/null 2>&1 || true' EXIT
+  trap 'rm -rf zap-work' EXIT
 
   TOKEN=$(tr -d '\r\n' < zap-work/token)
+  NOMBRE="zap-backend-$$"
   mkdir -p zap-reports
 
   ESTADO=0
-  docker exec -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" "$NOMBRE" \
+  docker run --rm --name "$NOMBRE" \
+    -v "$(pwd)/zap-work:/zap/wrk:rw" \
+    -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" \
+    ghcr.io/zaproxy/zaproxy:stable \
     zap-api-scan.py \
       -t openapi.yaml -f openapi -c backend-rules.conf -S \
       -r backend-zap.html -J backend-zap.json || ESTADO=$?
 
-  docker cp "$NOMBRE":/zap/wrk/backend-zap.html zap-reports/ 2>/dev/null || true
-  docker cp "$NOMBRE":/zap/wrk/backend-zap.json zap-reports/ 2>/dev/null || true
+  cp zap-work/backend-zap.html zap-reports/ 2>/dev/null || true
+  cp zap-work/backend-zap.json zap-reports/ 2>/dev/null || true
 
   echo "ZAP termino con codigo ${ESTADO} (0 limpio, 1 FAIL, 2 WARN, 3 error tecnico)."
   exit "$ESTADO"
