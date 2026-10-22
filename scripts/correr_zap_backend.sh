@@ -96,16 +96,13 @@ escanear() {
   mkdir -p zap-reports
 
   ESTADO=0
-  docker run --rm --name "$NOMBRE" \
-    -v "$(pwd)/zap-work:/zap/wrk:rw" \
-    -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" \
-    ghcr.io/zaproxy/zaproxy:stable \
+  docker exec -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" "$NOMBRE" \
     zap-api-scan.py \
       -t openapi.yaml -f openapi -c backend-rules.conf -S \
       -r backend-zap.html -J backend-zap.json || ESTADO=$?
 
-  cp zap-work/backend-zap.html zap-reports/ 2>/dev/null || true
-  cp zap-work/backend-zap.json zap-reports/ 2>/dev/null || true
+  docker cp "$NOMBRE":/zap/wrk/backend-zap.html zap-reports/ 2>/dev/null || true
+  docker cp "$NOMBRE":/zap/wrk/backend-zap.json zap-reports/ 2>/dev/null || true
 
   echo "ZAP termino con codigo ${ESTADO} (0 limpio, 1 FAIL, 2 WARN, 3 error tecnico)."
   exit "$ESTADO"
