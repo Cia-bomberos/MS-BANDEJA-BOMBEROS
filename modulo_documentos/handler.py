@@ -285,9 +285,12 @@ def derivar_documento(event, context):
     documento_id = event["pathParameters"]["id"]
     body = json.loads(event.get("body") or "{}")
     seccion_destino = body.get("seccion_destino")
+    nota = str(body.get("nota") or "").strip();
 
     if seccion_destino not in auth.SECCIONES_VALIDAS:
         return _respuesta(400, {"error": "seccion_destino inválida."})
+    if len(nota) > 500:
+        return _respuesta(400, {"error": "Nota no puede superar los 500 caracteres."})
 
     conn = get_connection()
     try:
@@ -302,27 +305,31 @@ def derivar_documento(event, context):
             seccion_actual = doc["seccion_responsable"]
             if not auth.puede_escribir(event, seccion_actual):
                 return _respuesta(403, {"error": "No tiene permiso para derivar este documento."})
-            # RN-0024/RN-0025: el documento externo (modalidad simplificada) no se deriva.
-            if doc.get("modalidad") == "simplificado":
-                return _respuesta(409, {"error": "Un documento externo no puede derivarse."})
             # Un documento ya atendido (o archivado) tiene la gestión cerrada.
             if doc.get("estado") in ("Atendido", "Archivado"):
                 return _respuesta(409, {"error": f"No se puede derivar un documento en estado '{doc['estado']}'."})
             if seccion_destino == seccion_actual:
                 return _respuesta(400, {"error": "El documento ya está en esa sección."})
+            if doc.get("modalidad") == "simplificado":
+                # Externo: cambia de sección pero sigue 'Pendiente'.
+                cur.execute(
+                    "UPDATE documentos SET seccion_responsable = %s, fecha_actualizacion = now() WHERE id = %s",
+                    (seccion_destino, documento_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE documentos
+                    SET seccion_responsable = %s, estado = 'En proceso', fecha_actualizacion = now()
+                    WHERE id = %s
+                    """,
+                    (seccion_destino, documento_id),
+                )
 
-            cur.execute(
-                """
-                UPDATE documentos
-                SET seccion_responsable = %s, estado = 'En proceso', fecha_actualizacion = now()
-                WHERE id = %s
-                """,
-                (seccion_destino, documento_id),
-            )
-            _registrar_historial(
-                cur, documento_id, event, "derivacion",
-                f"Derivado de {seccion_actual} a {seccion_destino}.",
-            )
+            detalle = f"Derivado de {seccion_actual} a {seccion_destino}."
+            if nota:
+                detalle += f" Nota: {nota}"
+            _registrar_historial(cur, documento_id, event, "derivacion", detalle)
         conn.commit()
         return _respuesta(200, {"mensaje": "Documento derivado.", "seccion_responsable": seccion_destino})
     except Exception as e:
@@ -395,6 +402,9 @@ def marcar_atendido(event, context):
     o desde 'En proceso' cuando la sección que lo revisó cierra la gestión)."""
     documento_id = event["pathParameters"]["id"]
 
+    body = json.loads(event.get("body") or "{}")
+    nota = str(body.get("nota") or "").strip()
+
     conn = get_connection()
     try:
         with conn.cursor() as cur:
@@ -411,7 +421,8 @@ def marcar_atendido(event, context):
                 "UPDATE documentos SET estado = 'Atendido', atendido_en = now(), fecha_actualizacion = now() WHERE id = %s",
                 (documento_id,),
             )
-            _registrar_historial(cur, documento_id, event, "atendido", "Documento marcado como Atendido.")
+            detalle = "Documento marcado como Atendido." + (f" Nota: {nota}" if nota else "")
+            _registrar_historial(cur, documento_id, event, "atendido", detalle)
         conn.commit()
         return _respuesta(200, {"mensaje": "Documento marcado como Atendido."})
     except Exception as e:
