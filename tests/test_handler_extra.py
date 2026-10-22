@@ -411,12 +411,6 @@ class TestErroresInesperados:
 
 
 class TestBugsDerivacionYEnvio:
-    def test_no_se_deriva_documento_externo(self, conn_mock):
-        conn, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Pendiente", "modalidad": "simplificado"}
-        r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
-        assert r["statusCode"] == 409
-        conn.commit.assert_not_called()
 
     @pytest.mark.parametrize("estado", ["Atendido", "Archivado"])
     def test_no_se_deriva_documento_cerrado(self, conn_mock, estado):
@@ -444,3 +438,18 @@ class TestBugsDerivacionYEnvio:
         r = handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=ENVIO), None)
         assert r["statusCode"] == 409
         conn.commit.assert_not_called()
+
+class TestDerivarConNota:
+    def test_la_nota_queda_en_el_historial(self, conn_mock):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Pendiente", "modalidad": "completo"}
+        body = {"seccion_destino": "Sanidad", "nota": "Revisar el presupuesto."}
+        resp = handler.derivar_documento(_event("Jefe_Maquinas", ID, body=body), None)
+        assert resp["statusCode"] == 200
+        historial = [c for c in cur.execute.call_args_list if "INSERT INTO historial_acciones" in c.args[0]][0]
+        assert historial.args[1][4] == "derivacion"
+        assert "Revisar el presupuesto." in historial.args[1][5]
+
+    def test_nota_demasiado_larga(self, conn_mock):
+        body = {"seccion_destino": "Sanidad", "nota": "x" * 501}
+        assert handler.derivar_documento(_event("Jefe_Maquinas", ID, body=body), None)["statusCode"] == 400
