@@ -55,7 +55,24 @@ provider:
     # Carpeta de Google Drive para el respaldo de archivados (RN-0027). Vacio = sin respaldo.
     DRIVE_FOLDER_ID: ${env:DRIVE_FOLDER_ID, ''}
 
+package:
+  patterns:
+    - '!venv/**'
+    - '!tests/**'
+    - '!e2e/**'
+    - 'swagger-ui/**'
+    - 'zap/openapi.yaml'
+
 functions:
+  docs:
+    handler: modulo_documentos/docs.servir_docs
+    events:
+      - http:
+          path: docs
+          method: get
+      - http:
+          path: openapi.json
+          method: get
   solicitarUrlSubida:
     handler: modulo_documentos/handler.solicitar_url_subida
     events:
