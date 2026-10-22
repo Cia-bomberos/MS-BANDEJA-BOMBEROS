@@ -1,0 +1,26 @@
+meta {
+  name: Verificar el cierre por la sección receptora
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("el documento queda Atendido", function () {
+    expect(res.body.estado).to.equal("Atendido");
+  });
+  test("la descarga y el envío los registra Sanidad", function () {
+    const s = Object.fromEntries(res.body.historial.map(h => [h.accion, h.seccion]));
+    expect(s.descarga).to.equal("Sanidad");
+    expect(s.envio_externo).to.equal("Sanidad");
+  });
+}

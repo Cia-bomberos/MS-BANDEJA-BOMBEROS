@@ -1,0 +1,25 @@
+meta {
+  name: La Jefatura registra el envío externo de la Carta
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{docCarta}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+body:json {
+  { "medio": "Correo institucional", "destinatario": "CGBVP - IV Comandancia", "fecha_envio": "{{fechaLimite}}", "hora_envio": "10:30" }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

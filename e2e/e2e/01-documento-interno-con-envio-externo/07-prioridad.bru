@@ -1,0 +1,25 @@
+meta {
+  name: Asignar prioridad Alta
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{docId}}/prioridad
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+body:json {
+  { "prioridad": "Alta" }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

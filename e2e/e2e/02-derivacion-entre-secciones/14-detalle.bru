@@ -1,0 +1,29 @@
+meta {
+  name: Máquinas consulta el historial completo
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{docId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("el historial refleja todo el recorrido", function () {
+    expect(res.body.historial.map(h => h.accion)).to.include.members(["registro", "derivacion", "actualizacion_archivo", "atendido"]);
+  });
+  test("cada acción indica su sección", function () {
+    const s = Object.fromEntries(res.body.historial.map(h => [h.accion, h.seccion]));
+    expect(s.derivacion).to.equal("Maquinas");
+    expect(s.actualizacion_archivo).to.equal("Sanidad");
+  });
+}

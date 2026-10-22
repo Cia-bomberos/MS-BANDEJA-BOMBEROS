@@ -1,0 +1,25 @@
+meta {
+  name: Administración intenta cambiar su prioridad (403)
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{docId}}/prioridad
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+body:json {
+  { "prioridad": "Alta" }
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.status).to.equal(403);
+  });
+}
