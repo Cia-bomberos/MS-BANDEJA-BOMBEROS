@@ -9,7 +9,7 @@ mismo Cognito User Pool que `MS-SEGURIDAD-BOMBEROS` para autenticación y roles.
 ### Infraestructura
 
 - **13 Lambdas** expuestos vía API Gateway, protegidos por el mismo Authorizer
-  de Cognito que seguridad (cross-stack reference a su User Pool).
+  de Cognito que seguridad (cross-stack reference a su User Pool)
 - **RDS propio del equipo**: 2 tablas nuevas (`documentos`, `historial_acciones`)
   más una tabla auxiliar (`documento_correlativos`) para la numeración atómica.
   Ver `migrations/001_init.sql` — correr una vez por entorno (dev/qa/uat/prod)
