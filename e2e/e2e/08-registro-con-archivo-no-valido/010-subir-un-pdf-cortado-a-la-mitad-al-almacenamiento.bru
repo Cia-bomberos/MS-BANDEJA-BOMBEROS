@@ -1,0 +1,25 @@
+meta {
+  name: Subir un PDF cortado a la mitad al almacenamiento
+  type: http
+  seq: 10
+}
+
+put {
+  url: {{uploadUrl}}
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/pdf
+}
+
+body:text {
+  {{pdfTruncado}}
+}
+
+tests {
+  test("el almacenamiento recibe el archivo (200)", function () {
+    expect(res.status).to.equal(200);
+  });
+}

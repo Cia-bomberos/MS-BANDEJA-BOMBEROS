@@ -1,0 +1,25 @@
+meta {
+  name: Sanidad marca el documento En proceso como Atendido con una nota
+  type: http
+  seq: 16
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d5_en_proceso}}/atender
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+body:json {
+  {"nota": "Sanidad concluye la evaluación del personal."}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

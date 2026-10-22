@@ -1,0 +1,25 @@
+meta {
+  name: Tras descargarlo, Sanidad sí registra el envío
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d7_nunca}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+body:json {
+  {"medio": "Mesa de partes", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro"}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

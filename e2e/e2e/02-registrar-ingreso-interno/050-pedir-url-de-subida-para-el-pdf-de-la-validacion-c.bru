@@ -1,0 +1,33 @@
+meta {
+  name: Pedir URL de subida para el PDF de la validación con una fecha imposible (Máquinas)
+  type: http
+  seq: 50
+}
+
+post {
+  url: {{baseUrl}}/documentos/upload-url
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {}
+}
+
+script:post-response {
+  if (res.body) { bru.setVar("uploadUrl", res.body.uploadUrl); bru.setVar("archivoKey", res.body.archivo_s3_key); }
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("entrega la URL y la ruta temporal", function () {
+    expect(res.body.uploadUrl).to.be.a("string");
+    expect(res.body.archivo_s3_key).to.be.a("string");
+  });
+}

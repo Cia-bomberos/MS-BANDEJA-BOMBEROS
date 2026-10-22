@@ -1,0 +1,25 @@
+meta {
+  name: Subir un texto renombrado a .pdf al almacenamiento
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{uploadUrl}}
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/pdf
+}
+
+body:text {
+  {{noEsPdf}}
+}
+
+tests {
+  test("el almacenamiento recibe el archivo (200)", function () {
+    expect(res.status).to.equal(200);
+  });
+}

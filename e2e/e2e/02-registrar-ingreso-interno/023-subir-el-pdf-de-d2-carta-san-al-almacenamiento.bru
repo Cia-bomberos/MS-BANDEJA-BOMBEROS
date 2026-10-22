@@ -1,0 +1,25 @@
+meta {
+  name: Subir el PDF de d2_carta_san al almacenamiento
+  type: http
+  seq: 23
+}
+
+put {
+  url: {{uploadUrl}}
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/pdf
+}
+
+body:text {
+  {{pdfValido}}
+}
+
+tests {
+  test("el almacenamiento recibe el archivo (200)", function () {
+    expect(res.status).to.equal(200);
+  });
+}

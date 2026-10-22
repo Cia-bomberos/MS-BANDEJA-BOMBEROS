@@ -1,0 +1,28 @@
+meta {
+  name: Jefe de Máquinas descarga d6_en_proceso
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d6_en_proceso}}/descargar
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+script:post-response {
+  if (res.body && res.body.downloadUrl) bru.setVar("downloadUrl", res.body.downloadUrl);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("entrega una URL de descarga", function () {
+    expect(res.body.downloadUrl).to.match(/^https?:\/\//);
+  });
+}

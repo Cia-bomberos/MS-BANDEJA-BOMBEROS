@@ -1,0 +1,25 @@
+meta {
+  name: Jefe de Máquinas registra el envío externo de d6_pendiente por Correo institucional
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d6_pendiente}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"medio": "Correo institucional", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro"}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

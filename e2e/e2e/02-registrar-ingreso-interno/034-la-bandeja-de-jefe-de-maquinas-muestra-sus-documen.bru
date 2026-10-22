@@ -1,0 +1,35 @@
+meta {
+  name: La bandeja de Jefe de Máquinas muestra sus documentos
+  type: http
+  seq: 34
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("d2_oficio_maq aparece en la bandeja con su asunto, estado y prioridad", function () {
+    const doc = res.body.documentos.find(x => x.id === bru.getVar("d2_oficio_maq"));
+    expect(doc, "d2_oficio_maq en la bandeja").to.exist;
+    expect(doc.asunto).to.equal("Oficio de Máquinas: requerimiento de equipos de protección personal");
+    expect(doc.prioridad).to.equal("Alta");
+    expect(doc.codigo_unico).to.equal(bru.getVar("d2_oficio_maqCodigo") || null);
+  });
+  test("d2_memo_maq aparece en la bandeja con su asunto, estado y prioridad", function () {
+    const doc = res.body.documentos.find(x => x.id === bru.getVar("d2_memo_maq"));
+    expect(doc, "d2_memo_maq en la bandeja").to.exist;
+    expect(doc.asunto).to.equal("Memorando de Máquinas: requerimiento de equipos de protección personal");
+    expect(doc.prioridad).to.equal("Alta");
+    expect(doc.codigo_unico).to.equal(bru.getVar("d2_memo_maqCodigo") || null);
+  });
+}

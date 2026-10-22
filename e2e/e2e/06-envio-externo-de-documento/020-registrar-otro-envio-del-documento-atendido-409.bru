@@ -1,0 +1,28 @@
+meta {
+  name: Registrar otro envío del documento atendido (409)
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d6_pendiente}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"medio": "Mesa de partes", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro"}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.status).to.equal(409);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

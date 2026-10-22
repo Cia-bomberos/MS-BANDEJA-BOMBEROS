@@ -1,0 +1,20 @@
+meta {
+  name: El PDF descargado de d6_pendiente es el registrado
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{downloadUrl}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("es un PDF", function () {
+    expect(String(res.body)).to.match(/^%PDF-/);
+  });
+}

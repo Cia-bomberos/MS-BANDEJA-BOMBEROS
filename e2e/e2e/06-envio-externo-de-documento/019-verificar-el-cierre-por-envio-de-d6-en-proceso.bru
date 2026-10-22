@@ -1,0 +1,35 @@
+meta {
+  name: Verificar el cierre por envío de d6_en_proceso
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d6_en_proceso}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Atendido, a cargo de Sanidad", function () {
+    expect(res.body.estado).to.equal("Atendido");
+    expect(res.body.seccion_responsable).to.equal("Sanidad");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("el envío guarda el medio Courier, el destinatario y la fecha y hora 09:30", function () {
+    const e = (res.body.historial || []).find(h => h.accion === "envio_externo");
+    expect(e, "envío en el historial").to.exist;
+    expect(e.detalle).to.contain("Courier");
+    expect(e.detalle).to.contain("CGBVP - IV Comandancia Departamental Lima Centro");
+    expect(e.detalle).to.contain("Enviado el " + bru.getVar("fechaHoy") + " a las 09:30");
+  });
+}

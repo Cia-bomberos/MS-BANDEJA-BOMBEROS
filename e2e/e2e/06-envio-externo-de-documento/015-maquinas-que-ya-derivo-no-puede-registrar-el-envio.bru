@@ -1,0 +1,28 @@
+meta {
+  name: Máquinas, que ya derivó, no puede registrar el envío (403)
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d6_en_proceso}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"medio": "Courier", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro"}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.status).to.equal(403);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

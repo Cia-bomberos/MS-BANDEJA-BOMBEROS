@@ -1,0 +1,33 @@
+meta {
+  name: Administración recibe el documento y ve la nota
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d4_cadena}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado En proceso, a cargo de Administración", function () {
+    expect(res.body.estado).to.equal("En proceso");
+    expect(res.body.seccion_responsable).to.equal("Administracion");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("la derivación de Máquinas guarda su nota «Revisar el presupuesto para la compra de equipos.»", function () {
+    const x = (res.body.historial || []).filter(h => h.accion === "derivacion")[0];
+    expect(x, "derivacion número 1 en el historial").to.exist;
+    expect(JSON.stringify(x)).to.contain("Revisar el presupuesto para la compra de equipos.");
+  });
+}

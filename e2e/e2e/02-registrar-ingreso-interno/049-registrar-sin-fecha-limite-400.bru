@@ -1,0 +1,36 @@
+meta {
+  name: Registrar sin fecha límite (400)
+  type: http
+  seq: 49
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Oficio",
+    "asunto": "Oficio de Máquinas: requerimiento de equipos de protección personal",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("el mensaje se refiere a fecha", function () {
+    expect(res.body.error).to.match(/fecha/i);
+  });
+}

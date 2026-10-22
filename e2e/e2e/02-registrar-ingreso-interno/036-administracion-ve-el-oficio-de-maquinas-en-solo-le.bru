@@ -1,0 +1,28 @@
+meta {
+  name: Administración ve el Oficio de Máquinas en solo lectura
+  type: http
+  seq: 36
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d2_oficio_maq}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Pendiente, a cargo de Máquinas", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+    expect(res.body.seccion_responsable).to.equal("Maquinas");
+  });
+  test("en solo lectura para esta cuenta", function () {
+    expect(res.body.solo_lectura).to.equal(true);
+  });
+}

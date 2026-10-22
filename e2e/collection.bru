@@ -1,11 +1,26 @@
 script:pre-request {
-  // Datos comunes de todas las peticiones.
-  // Fecha límite: hoy en Lima + 20 días (prioridad automática Media).
+  // Fechas de referencia según el día de Lima (UTC-5, sin horario de verano).
   const lima = new Date(Date.now() - 5 * 60 * 60 * 1000);
-  lima.setUTCDate(lima.getUTCDate() + 20);
-  bru.setVar("fechaLimite", lima.toISOString().slice(0, 10));
-  // PDF de una página con estructura completa (tabla de referencias incluida),
-  // enviado como texto: el backend lo abre y valida (RNF-0007).
-  bru.setVar("pdfMinimo", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 75 >>\nstream\nBT /F1 18 Tf 72 720 Td (Documento de prueba E2E - Bandeja Documental) Tj ET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000241 00000 n \n0000000366 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n436\n%%EOF\n");
-  bru.setVar("pdfVersion2", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 78 >>\nstream\nBT /F1 18 Tf 72 720 Td (Documento de prueba E2E - version 2 del adjunto) Tj ET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000241 00000 n \n0000000369 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n439\n%%EOF\n");
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 0); bru.setVar("fecha_0", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 3); bru.setVar("fecha_3", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 9); bru.setVar("fecha_9", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 10); bru.setVar("fecha_10", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 15); bru.setVar("fecha_15", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 20); bru.setVar("fecha_20", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 30); bru.setVar("fecha_30", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 31); bru.setVar("fecha_31", f.toISOString().slice(0, 10)); }
+  { const f = new Date(lima.getTime()); f.setUTCDate(f.getUTCDate() + 40); bru.setVar("fecha_40", f.toISOString().slice(0, 10)); }
+  const iso = lima.toISOString().slice(0, 10);
+  bru.setVar("fechaIsoHoy", iso);
+  bru.setVar("fechaHoy", iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4));
+  bru.setVar("anioLima", iso.slice(0, 4));
+  // PDF real de una página (el backend lo abre y valida, RNF-0007).
+  bru.setVar("pdfValido", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 75 >>\nstream\nBT /F1 18 Tf 72 720 Td (Documento de prueba E2E - Bandeja Documental) Tj ET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000241 00000 n \n0000000366 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n436\n%%EOF\n");
+  // Archivos no válidos.
+  bru.setVar("pdfTruncado", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 75 >>\nstream\nBT /F1 18 Tf 72 720 Td (Documento de\n%%EOF\n");
+  bru.setVar("pdfSinPaginas", "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\nxref\n0 3\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \ntrailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n110\n%%EOF\n");
+  bru.setVar("noEsPdf", "Este archivo es texto plano renombrado a .pdf y no es un documento PDF.");
+  bru.setVar("firmaFalsa", "%PDF-1.4\nContenido dañado que no corresponde a un PDF real.\n%%EOF\n");
+  bru.setVar("imagenFalsa", "GIF89a imagen renombrada con extensión pdf que no es un documento");
+  bru.setVar("htmlFalso", "<!DOCTYPE html><html><body><h1>Página web renombrada a .pdf</h1></body></html>");
 }

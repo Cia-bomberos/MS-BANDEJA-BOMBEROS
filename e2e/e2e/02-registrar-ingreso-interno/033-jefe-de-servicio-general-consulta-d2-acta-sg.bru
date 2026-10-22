@@ -1,0 +1,61 @@
+meta {
+  name: Jefe de Servicio General consulta d2_acta_sg
+  type: http
+  seq: 33
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d2_acta_sg}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Pendiente, a cargo de Servicio General", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+    expect(res.body.seccion_responsable).to.equal("ServicioGeneral");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("el asunto quedó guardado", function () {
+    expect(res.body.asunto).to.equal("Acta de Servicio General: requerimiento de equipos de protección personal");
+  });
+  test("la fecha límite quedó guardada y no está vencida", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_40"));
+    expect(res.body.vencido).to.equal(false);
+  });
+  test("la sección de origen es Servicio General", function () {
+    expect(res.body.seccion_origen).to.equal("ServicioGeneral");
+  });
+  test("prioridad Media marcada como manual", function () {
+    expect(res.body.prioridad).to.equal("Media");
+    expect(res.body.prioridad_manual).to.equal(true);
+  });
+  test("el PDF quedó en la carpeta definitiva", function () {
+    expect(res.body.archivo_s3_key).to.match(/^documentos\/.+\.pdf$/);
+  });
+  test("guarda la fecha de creación", function () {
+    expect(res.body.fecha_creacion).to.be.a("string").and.not.empty;
+  });
+  test("el historial empieza con el ingreso por Servicio General y su autor", function () {
+    const h = (res.body.historial || [])[0];
+    expect(h, "entrada de registro").to.exist;
+    expect(h.accion).to.equal("registro");
+    expect(h.seccion).to.equal("ServicioGeneral");
+    expect(h.usuario_nombre).to.be.a("string").and.not.empty;
+    expect(h.fecha_hora).to.be.a("string").and.not.empty;
+  });
+  test("tipo Acta, registro completo y el mismo código asignado", function () {
+    expect(res.body.tipo).to.equal("Acta");
+    expect(res.body.modalidad).to.equal("completo");
+    expect(res.body.codigo_unico).to.equal(bru.getVar("d2_acta_sgCodigo"));
+  });
+}

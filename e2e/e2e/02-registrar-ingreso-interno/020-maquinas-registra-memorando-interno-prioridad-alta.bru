@@ -1,0 +1,56 @@
+meta {
+  name: Máquinas registra Memorando interno, prioridad Alta d2_memo_maq
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Memorando",
+    "asunto": "Memorando de Máquinas: requerimiento de equipos de protección personal",
+    "fecha_limite": "{{fecha_0}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d2_memo_maq", res.body.id);
+  if (res.body) bru.setVar("d2_memo_maqCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Memorando de Máquinas: requerimiento de equipos de protección personal");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_0"));
+  });
+  test("prioridad Alta por plazo de 0 días", function () {
+    expect(res.body.prioridad).to.equal("Alta");
+  });
+  test("registro completo del tipo Memorando con código institucional", function () {
+    expect(res.body.modalidad).to.equal("completo");
+    expect(res.body.tipo).to.equal("Memorando");
+    expect(res.body.codigo_unico).to.match(/^MEMORANDO N° \d{3}-\d{4}\/CGBVP\/IVCDLC\/B3$/);
+  });
+  test("el código lleva el año en curso de Lima", function () {
+    expect(res.body.codigo_unico).to.contain("-" + bru.getVar("anioLima") + "/");
+  });
+}

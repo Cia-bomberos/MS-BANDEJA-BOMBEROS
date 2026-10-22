@@ -1,0 +1,28 @@
+meta {
+  name: Máquinas, que ya derivó, no puede atender (403)
+  type: http
+  seq: 15
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d5_en_proceso}}/atender
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"nota": "Intento."}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.status).to.equal(403);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

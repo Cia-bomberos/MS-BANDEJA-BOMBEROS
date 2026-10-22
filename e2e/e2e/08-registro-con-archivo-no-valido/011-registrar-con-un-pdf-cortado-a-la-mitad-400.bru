@@ -1,0 +1,37 @@
+meta {
+  name: Registrar con un PDF cortado a la mitad (400)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Oficio",
+    "asunto": "Oficio de Máquinas: requerimiento de equipos de protección personal",
+    "fecha_limite": "{{fecha_20}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("el mensaje se refiere a PDF", function () {
+    expect(res.body.error).to.match(/PDF/i);
+  });
+}

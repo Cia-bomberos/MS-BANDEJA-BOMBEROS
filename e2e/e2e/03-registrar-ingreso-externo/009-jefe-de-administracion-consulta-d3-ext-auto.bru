@@ -1,0 +1,61 @@
+meta {
+  name: Jefe de Administración consulta d3_ext_auto
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d3_ext_auto}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Pendiente, a cargo de Administración", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+    expect(res.body.seccion_responsable).to.equal("Administracion");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("el asunto quedó guardado", function () {
+    expect(res.body.asunto).to.equal("Invitación externa recibida por Administración para capacitación");
+  });
+  test("la fecha límite quedó guardada y no está vencida", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_31"));
+    expect(res.body.vencido).to.equal(false);
+  });
+  test("la sección de origen es Administración", function () {
+    expect(res.body.seccion_origen).to.equal("Administracion");
+  });
+  test("prioridad Baja calculada por el plazo", function () {
+    expect(res.body.prioridad).to.equal("Baja");
+    expect(res.body.prioridad_manual).to.equal(false);
+  });
+  test("el PDF quedó en la carpeta definitiva", function () {
+    expect(res.body.archivo_s3_key).to.match(/^documentos\/.+\.pdf$/);
+  });
+  test("guarda la fecha de creación", function () {
+    expect(res.body.fecha_creacion).to.be.a("string").and.not.empty;
+  });
+  test("el historial empieza con el ingreso por Administración y su autor", function () {
+    const h = (res.body.historial || [])[0];
+    expect(h, "entrada de registro").to.exist;
+    expect(h.accion).to.equal("registro");
+    expect(h.seccion).to.equal("Administracion");
+    expect(h.usuario_nombre).to.be.a("string").and.not.empty;
+    expect(h.fecha_hora).to.be.a("string").and.not.empty;
+  });
+  test("registro simplificado sin tipo ni código", function () {
+    expect(res.body.modalidad).to.equal("simplificado");
+    expect(res.body.tipo).to.equal(null);
+    expect(res.body.codigo_unico).to.equal(null);
+  });
+}

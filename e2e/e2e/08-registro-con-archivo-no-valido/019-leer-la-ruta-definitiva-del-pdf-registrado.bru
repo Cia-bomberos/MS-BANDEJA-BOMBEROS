@@ -1,0 +1,25 @@
+meta {
+  name: Leer la ruta definitiva del PDF registrado
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d8_reuso}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+script:post-response {
+  bru.setVar("rutaAjena", res.body.archivo_s3_key);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

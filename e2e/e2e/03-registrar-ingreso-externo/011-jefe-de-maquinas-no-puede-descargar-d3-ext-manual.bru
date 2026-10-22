@@ -1,0 +1,27 @@
+meta {
+  name: Jefe de Máquinas no puede descargar d3_ext_manual (403)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d3_ext_manual}}/descargar
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.status).to.equal(403);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("no entrega URL de descarga", function () {
+    expect(res.body.downloadUrl).to.equal(undefined);
+  });
+}

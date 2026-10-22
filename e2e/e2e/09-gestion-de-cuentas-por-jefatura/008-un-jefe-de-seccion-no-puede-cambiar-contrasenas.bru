@@ -1,0 +1,56 @@
+meta {
+  name: Un Jefe de Sección no puede cambiar contraseñas
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+script:pre-request {
+    bru.setVar("seguridadError", "");
+    if (!bru.getEnvVar("seguridadUrl")) {
+      try {
+        const c = await bru.sendRequest({ method: "GET", url: "https://bomberos-config-" + bru.getEnvVar("stage") + ".s3.amazonaws.com/config.json" });
+        const datos = typeof c.data === "string" ? JSON.parse(c.data) : c.data;
+        bru.setEnvVar("seguridadUrl", String(datos.apiUrl || "").replace(/\/+$/, ""));
+      } catch (e) {
+        bru.setVar("seguridadError", "No se pudo leer la configuración de seguridad del stage " + bru.getEnvVar("stage"));
+      }
+    }
+
+    const base = bru.getEnvVar("seguridadUrl");
+    if (base) {
+      if (bru.getVar("claveSGVerificada") !== "si") {
+      bru.setVar("estadoSeccion", "omitido: la contraseña de Servicio General no se pudo verificar");
+    } else {
+      try {
+    const r = await bru.sendRequest({
+      method: "PATCH",
+      url: base + "/admin/cuentas/" + encodeURIComponent(bru.getProcessEnv("E2E_SERVICIOGENERAL_USUARIO")) + "/password",
+      headers: { "Authorization": bru.getVar("token"), "Content-Type": "application/json" },
+      data: JSON.stringify({ nueva_password: bru.getProcessEnv("E2E_SERVICIOGENERAL_PASSWORD") })
+    });
+    bru.setVar("estadoSeccion", String(r.status));
+  } catch (e) {
+    bru.setVar("estadoSeccion", String(e.status));
+  }
+    }
+    }
+}
+
+tests {
+  test("se conoce la URL del API de seguridad", function () {
+    expect(bru.getVar("seguridadError") || "", bru.getVar("seguridadError")).to.equal("");
+  });
+  test("responde 403", function () {
+    expect(bru.getVar("estadoSeccion")).to.equal("403");
+  });
+}

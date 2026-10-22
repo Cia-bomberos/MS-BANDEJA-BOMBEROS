@@ -1,0 +1,21 @@
+meta {
+  name: Con un token inventado: el API rechaza la petición (401)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer token-inventado-e2e
+}
+
+tests {
+  test("responde 401", function () {
+    expect(res.status).to.equal(401);
+  });
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Registrar con el asunto solo de espacios (400)
+  type: http
+  seq: 46
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Oficio",
+    "asunto": "        ",
+    "fecha_limite": "{{fecha_20}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("el mensaje se refiere a asunto", function () {
+    expect(res.body.error).to.match(/asunto/i);
+  });
+}

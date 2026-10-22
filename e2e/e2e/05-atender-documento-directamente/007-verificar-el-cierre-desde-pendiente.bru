@@ -1,0 +1,36 @@
+meta {
+  name: Verificar el cierre desde Pendiente
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d5_pendiente}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Atendido, a cargo de Servicio General", function () {
+    expect(res.body.estado).to.equal("Atendido");
+    expect(res.body.seccion_responsable).to.equal("ServicioGeneral");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("registra la fecha de atención", function () {
+    expect(res.body.atendido_en).to.be.a("string").and.not.empty;
+  });
+  test("la atención de Servicio General guarda su nota «Se entregó el material solicitado al área de logística.»", function () {
+    const x = (res.body.historial || []).filter(h => h.accion === "atendido")[0];
+    expect(x, "atendido número 1 en el historial").to.exist;
+    expect(JSON.stringify(x)).to.contain("Se entregó el material solicitado al área de logística.");
+  });
+}

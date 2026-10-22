@@ -1,0 +1,31 @@
+meta {
+  name: Envío sin descarga propia: solo lo descargó la Jefatura (409)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d7_jefatura}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"medio": "Mesa de partes", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro"}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.status).to.equal(409);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("el mensaje se refiere a descargar", function () {
+    expect(res.body.error).to.match(/descargar/i);
+  });
+}

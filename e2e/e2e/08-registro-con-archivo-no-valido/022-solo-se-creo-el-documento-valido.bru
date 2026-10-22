@@ -1,0 +1,24 @@
+meta {
+  name: Solo se creó el documento válido
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("Máquinas tiene un solo documento más que al inicio", function () {
+    expect(res.body.documentos.length).to.equal(Number(bru.getVar("cantidadInicial")) + 1);
+  });
+}

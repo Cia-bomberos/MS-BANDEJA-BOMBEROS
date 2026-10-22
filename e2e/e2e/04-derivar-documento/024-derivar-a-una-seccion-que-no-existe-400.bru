@@ -1,0 +1,28 @@
+meta {
+  name: Derivar a una sección que no existe (400)
+  type: http
+  seq: 24
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d4_jefatura}}/derivar
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+body:json {
+  {"seccion_destino": "Logistica"}
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

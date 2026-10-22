@@ -1,0 +1,24 @@
+meta {
+  name: Ninguna validación creó documentos
+  type: http
+  seq: 59
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("la cantidad de documentos de Máquinas no cambió", function () {
+    expect(res.body.documentos.length).to.equal(Number(bru.getVar("cantidadAntes")));
+  });
+}

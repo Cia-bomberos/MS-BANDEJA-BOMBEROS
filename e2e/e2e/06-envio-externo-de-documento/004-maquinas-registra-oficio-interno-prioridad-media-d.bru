@@ -1,0 +1,56 @@
+meta {
+  name: Máquinas registra Oficio interno, prioridad Media d6_pendiente
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Oficio",
+    "asunto": "Oficio de Máquinas: requerimiento de equipos de protección personal",
+    "fecha_limite": "{{fecha_20}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d6_pendiente", res.body.id);
+  if (res.body) bru.setVar("d6_pendienteCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Oficio de Máquinas: requerimiento de equipos de protección personal");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_20"));
+  });
+  test("prioridad Media por plazo de 20 días", function () {
+    expect(res.body.prioridad).to.equal("Media");
+  });
+  test("registro completo del tipo Oficio con código institucional", function () {
+    expect(res.body.modalidad).to.equal("completo");
+    expect(res.body.tipo).to.equal("Oficio");
+    expect(res.body.codigo_unico).to.match(/^OFICIO N° \d{3}-\d{4}\/CGBVP\/IVCDLC\/B3$/);
+  });
+  test("el código lleva el año en curso de Lima", function () {
+    expect(res.body.codigo_unico).to.contain("-" + bru.getVar("anioLima") + "/");
+  });
+}

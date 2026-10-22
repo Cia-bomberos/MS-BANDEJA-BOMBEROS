@@ -1,0 +1,52 @@
+meta {
+  name: Una contraseña de menos de 8 caracteres se rechaza
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+script:pre-request {
+    bru.setVar("seguridadError", "");
+    if (!bru.getEnvVar("seguridadUrl")) {
+      try {
+        const c = await bru.sendRequest({ method: "GET", url: "https://bomberos-config-" + bru.getEnvVar("stage") + ".s3.amazonaws.com/config.json" });
+        const datos = typeof c.data === "string" ? JSON.parse(c.data) : c.data;
+        bru.setEnvVar("seguridadUrl", String(datos.apiUrl || "").replace(/\/+$/, ""));
+      } catch (e) {
+        bru.setVar("seguridadError", "No se pudo leer la configuración de seguridad del stage " + bru.getEnvVar("stage"));
+      }
+    }
+
+    const base = bru.getEnvVar("seguridadUrl");
+    if (base) {
+      try {
+    const r = await bru.sendRequest({
+      method: "PATCH",
+      url: base + "/admin/cuentas/" + encodeURIComponent(bru.getProcessEnv("E2E_SERVICIOGENERAL_USUARIO")) + "/password",
+      headers: { "Authorization": bru.getVar("token"), "Content-Type": "application/json" },
+      data: JSON.stringify({ nueva_password: "corta" })
+    });
+    bru.setVar("estadoCorta", String(r.status));
+  } catch (e) {
+    bru.setVar("estadoCorta", String(e.status));
+  }
+    }
+}
+
+tests {
+  test("se conoce la URL del API de seguridad", function () {
+    expect(bru.getVar("seguridadError") || "", bru.getVar("seguridadError")).to.equal("");
+  });
+  test("responde 400", function () {
+    expect(bru.getVar("estadoCorta")).to.equal("400");
+  });
+}
