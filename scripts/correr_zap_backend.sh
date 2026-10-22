@@ -34,6 +34,8 @@ preparar() {
   rm -rf zap-work
   mkdir -p zap-work
 
+  chmod -R 0777 zap-work
+
   # Login en Cognito como Jefatura (ve y gestiona todas las secciones).
   CUERPO=$(CLIENT_ID="$CLIENT_ID" node -e '
     process.stdout.write(JSON.stringify({
@@ -93,6 +95,9 @@ escanear() {
   TOKEN=$(tr -d '\r\n' < zap-work/token)
   NOMBRE="zap-backend-$$"
   mkdir -p zap-reports
+
+  chmod -R 0777 zap-work
+  ls -la zap-work/
 
   ESTADO=0
   docker run --rm --name "$NOMBRE" \
