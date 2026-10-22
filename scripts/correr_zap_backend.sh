@@ -90,26 +90,38 @@ preparar() {
 escanear() {
   export MSYS_NO_PATHCONV=1
   [ -s zap-work/token ] || { echo "Falta zap-work/token: corre antes la fase 'preparar'." >&2; exit 64; }
-  trap 'rm -rf zap-work' EXIT
+  trap 'rm -rf zap-work; docker rm -f "$NOMBRE" >/dev/null 2>&1 || true' EXIT
 
   TOKEN=$(tr -d '\r\n' < zap-work/token)
   NOMBRE="zap-backend-$$"
   mkdir -p zap-reports
 
-  chmod -R 0777 zap-work
-  ls -la zap-work/
+  # Arranca el contenedor en reposo (sin volumen montado)
+  docker run -d --name "$NOMBRE" --entrypoint sleep ghcr.io/zaproxy/zaproxy:stable 3600 > /dev/null
 
+  # Crea /zap/wrk DENTRO del contenedor y copia los archivos ahí
+  docker exec -u root "$NOMBRE" mkdir -p /zap/wrk
+  docker cp zap-work/openapi.yaml "$NOMBRE":/zap/wrk/openapi.yaml
+  docker cp zap-work/backend-rules.conf "$NOMBRE":/zap/wrk/backend-rules.conf
+  docker cp zap-work/token "$NOMBRE":/zap/wrk/token
+
+  # CRÍTICO: los archivos copiados pertenecen a root. ZAP corre como uid 1000.
+  # Damos permisos de lectura/escritura a todos para evitar "Permission denied".
+  docker exec -u root "$NOMBRE" chmod -R 0777 /zap/wrk
+
+  # Verificación en el log: debe listar los 3 archivos
+  docker exec "$NOMBRE" ls -la /zap/wrk
+
+  # Ejecuta ZAP dentro del contenedor. El token se pasa como variable de entorno.
   ESTADO=0
-  docker run --rm --name "$NOMBRE" \
-    -v "$(pwd)/zap-work:/zap/wrk:rw" \
-    -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" \
-    ghcr.io/zaproxy/zaproxy:stable \
+  docker exec -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" "$NOMBRE" \
     zap-api-scan.py \
       -t openapi.yaml -f openapi -c backend-rules.conf -S \
       -r backend-zap.html -J backend-zap.json || ESTADO=$?
 
-  cp zap-work/backend-zap.html zap-reports/ 2>/dev/null || true
-  cp zap-work/backend-zap.json zap-reports/ 2>/dev/null || true
+  # Extrae los reportes del contenedor
+  docker cp "$NOMBRE":/zap/wrk/backend-zap.html zap-reports/ 2>/dev/null || true
+  docker cp "$NOMBRE":/zap/wrk/backend-zap.json zap-reports/ 2>/dev/null || true
 
   echo "ZAP termino con codigo ${ESTADO} (0 limpio, 1 FAIL, 2 WARN, 3 error tecnico)."
   exit "$ESTADO"
