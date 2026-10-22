@@ -1,6 +1,6 @@
 -- Esquema inicial del módulo de Bandeja Documental.
 -- Correr una vez por entorno (dev/qa/uat/prod) contra la BD correspondiente
--- dentro del RDS propio del equipo. Idempotente (IF NOT EXISTS) para poder
+-- dentro del RDS propio del equipo. Idempotente (IF NOT EXISTS) para poder.
 -- re-correrlo sin romper nada si ya existe.
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";  -- para gen_random_uuid()
