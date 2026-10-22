@@ -95,12 +95,6 @@ escanear() {
   TOKEN=$(tr -d '\r\n' < zap-work/token)
   mkdir -p zap-reports
 
-  docker run -d --name "$NOMBRE" --entrypoint sleep ghcr.io/zaproxy/zaproxy:stable 3600 > /dev/null
-  docker cp zap-work/openapi.yaml "$NOMBRE":/zap/wrk/openapi.yaml
-  docker cp zap-work/backend-rules.conf "$NOMBRE":/zap/wrk/backend-rules.conf
-  docker exec "$NOMBRE" ls -l /zap/wrk
-
-  # -S = modo seguro: solo analisis pasivo (sin escaneo activo contra la base compartida).
   ESTADO=0
   docker exec -e ZAP_AUTH_HEADER_VALUE="${TOKEN}" "$NOMBRE" \
     zap-api-scan.py \
