@@ -1,0 +1,52 @@
+meta {
+  name: Administración registra un documento externo, prioridad Baja d3_ext_auto
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+body:json {
+  {
+    "origen": "externo",
+    "asunto": "Invitación externa recibida por Administración para capacitación",
+    "fecha_limite": "{{fecha_31}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d3_ext_auto", res.body.id);
+  if (res.body) bru.setVar("d3_ext_autoCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Invitación externa recibida por Administración para capacitación");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_31"));
+  });
+  test("prioridad Baja por plazo de 31 días", function () {
+    expect(res.body.prioridad).to.equal("Baja");
+  });
+  test("registro simplificado sin tipo ni código", function () {
+    expect(res.body.modalidad).to.equal("simplificado");
+    expect(res.body.tipo).to.equal(null);
+    expect(res.body.codigo_unico).to.equal(null);
+  });
+}

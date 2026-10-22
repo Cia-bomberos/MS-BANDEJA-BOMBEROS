@@ -1,0 +1,57 @@
+meta {
+  name: Administración registra Solicitud interno, prioridad Baja d2_solicitud_adm
+  type: http
+  seq: 28
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Solicitud",
+    "asunto": "Solicitud de Administración: requerimiento de equipos de protección personal",
+    "fecha_limite": "{{fecha_15}}",
+    "archivo_s3_key": "{{archivoKey}}",
+    "prioridad": "Baja"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d2_solicitud_adm", res.body.id);
+  if (res.body) bru.setVar("d2_solicitud_admCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Solicitud de Administración: requerimiento de equipos de protección personal");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_15"));
+  });
+  test("prioridad Baja elegida a mano", function () {
+    expect(res.body.prioridad).to.equal("Baja");
+  });
+  test("registro completo del tipo Solicitud con código institucional", function () {
+    expect(res.body.modalidad).to.equal("completo");
+    expect(res.body.tipo).to.equal("Solicitud");
+    expect(res.body.codigo_unico).to.match(/^SOLICITUD N° \d{3}-\d{4}\/CGBVP\/IVCDLC\/B3$/);
+  });
+  test("el código lleva el año en curso de Lima", function () {
+    expect(res.body.codigo_unico).to.contain("-" + bru.getVar("anioLima") + "/");
+  });
+}

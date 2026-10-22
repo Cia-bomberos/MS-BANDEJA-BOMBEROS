@@ -1,0 +1,28 @@
+meta {
+  name: Volver a marcarlo como Atendido (409)
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d5_pendiente}}/atender
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+body:json {
+  {"nota": "Otra vez."}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.status).to.equal(409);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

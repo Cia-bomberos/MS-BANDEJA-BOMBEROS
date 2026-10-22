@@ -1,0 +1,28 @@
+meta {
+  name: Cambiar la prioridad de un documento Atendido (409)
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d5_pendiente}}/prioridad
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+body:json {
+  {"prioridad": "Alta"}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.status).to.equal(409);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Contraseña incorrecta: Cognito rechaza el ingreso
+  type: http
+  seq: 3
+}
+
+post {
+  url: https://cognito-idp.us-east-1.amazonaws.com/
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-amz-json-1.1
+  X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth
+}
+
+body:json {
+  {
+    "AuthFlow": "USER_PASSWORD_AUTH",
+    "ClientId": "{{cognitoClientId}}",
+    "AuthParameters": { "USERNAME": "{{process.env.E2E_MAQUINAS_USUARIO}}", "PASSWORD": "ContrasenaIncorrecta-E2E" }
+  }
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("el motivo es credenciales inválidas", function () {
+    expect(JSON.stringify(res.body)).to.contain("NotAuthorizedException");
+  });
+}

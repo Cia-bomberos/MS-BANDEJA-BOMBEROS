@@ -1,0 +1,25 @@
+meta {
+  name: Contar los documentos de Máquinas antes de las validaciones
+  type: http
+  seq: 40
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+script:post-response {
+  bru.setVar("cantidadAntes", res.body.documentos.length);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

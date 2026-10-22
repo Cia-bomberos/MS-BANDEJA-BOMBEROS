@@ -1,0 +1,27 @@
+meta {
+  name: Jefe de Sanidad no puede descargar d2_oficio_maq (403)
+  type: http
+  seq: 38
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d2_oficio_maq}}/descargar
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.status).to.equal(403);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("no entrega URL de descarga", function () {
+    expect(res.body.downloadUrl).to.equal(undefined);
+  });
+}

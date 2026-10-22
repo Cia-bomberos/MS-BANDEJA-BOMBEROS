@@ -1,0 +1,44 @@
+meta {
+  name: La Jefatura ve las cuentas de las cuatro secciones
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{seguridadUrl}}/admin/cuentas
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+script:pre-request {
+  bru.setVar("seguridadError", "");
+  if (!bru.getEnvVar("seguridadUrl")) {
+    try {
+      const c = await bru.sendRequest({ method: "GET", url: "https://bomberos-config-" + bru.getEnvVar("stage") + ".s3.amazonaws.com/config.json" });
+      const datos = typeof c.data === "string" ? JSON.parse(c.data) : c.data;
+      bru.setEnvVar("seguridadUrl", String(datos.apiUrl || "").replace(/\/+$/, ""));
+    } catch (e) {
+      bru.setVar("seguridadError", "No se pudo leer la configuración de seguridad del stage " + bru.getEnvVar("stage"));
+    }
+  }
+}
+
+tests {
+  test("se conoce la URL del API de seguridad", function () {
+    expect(bru.getVar("seguridadError") || "", bru.getVar("seguridadError")).to.equal("");
+  });
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("lista las cuentas de Administración, Servicio General, Máquinas y Sanidad", function () {
+    const g = res.body.cuentas.map(c => c.grupo);
+    ["Jefe_Administracion", "Jefe_ServicioGeneral", "Jefe_Maquinas", "Jefe_Sanidad"].forEach(x => expect(g).to.include(x));
+  });
+  test("no incluye la cuenta de Jefatura", function () {
+    expect(res.body.cuentas.map(c => c.grupo)).to.not.include("Jefatura");
+  });
+}

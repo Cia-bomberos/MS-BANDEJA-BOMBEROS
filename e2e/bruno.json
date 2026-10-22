@@ -2,5 +2,9 @@
   "version": "1",
   "name": "MS-BANDEJA-BOMBEROS · Pruebas E2E",
   "type": "collection",
-  "ignore": ["node_modules", ".git", "reportes"]
+  "ignore": [
+    "node_modules",
+    ".git",
+    "reportes"
+  ]
 }

@@ -1,0 +1,54 @@
+meta {
+  name: Sanidad registra un documento externo, prioridad Alta d3_ext_manual
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+body:json {
+  {
+    "origen": "externo",
+    "tipo": "Oficio",
+    "asunto": "Invitación externa recibida por Sanidad para capacitación",
+    "fecha_limite": "{{fecha_40}}",
+    "archivo_s3_key": "{{archivoKey}}",
+    "prioridad": "Alta"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d3_ext_manual", res.body.id);
+  if (res.body) bru.setVar("d3_ext_manualCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Invitación externa recibida por Sanidad para capacitación");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_40"));
+  });
+  test("prioridad Alta elegida a mano", function () {
+    expect(res.body.prioridad).to.equal("Alta");
+  });
+  test("registro simplificado sin tipo ni código aunque se envíe el tipo Oficio", function () {
+    expect(res.body.modalidad).to.equal("simplificado");
+    expect(res.body.tipo).to.equal(null);
+    expect(res.body.codigo_unico).to.equal(null);
+  });
+}

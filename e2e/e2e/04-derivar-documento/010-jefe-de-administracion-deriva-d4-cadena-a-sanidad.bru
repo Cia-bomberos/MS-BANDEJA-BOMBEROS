@@ -1,0 +1,28 @@
+meta {
+  name: Jefe de Administración deriva d4_cadena a Sanidad
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d4_cadena}}/derivar
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+body:json {
+  {"seccion_destino": "Sanidad", "nota": "Evaluar si los equipos cumplen la norma de salud ocupacional."}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("la sección responsable pasa a Sanidad", function () {
+    expect(res.body.seccion_responsable).to.equal("Sanidad");
+  });
+}

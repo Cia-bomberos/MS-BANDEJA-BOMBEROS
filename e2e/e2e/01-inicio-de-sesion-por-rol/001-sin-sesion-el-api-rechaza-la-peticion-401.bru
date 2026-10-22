@@ -1,0 +1,17 @@
+meta {
+  name: Sin sesión: el API rechaza la petición (401)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+tests {
+  test("responde 401", function () {
+    expect(res.status).to.equal(401);
+  });
+}

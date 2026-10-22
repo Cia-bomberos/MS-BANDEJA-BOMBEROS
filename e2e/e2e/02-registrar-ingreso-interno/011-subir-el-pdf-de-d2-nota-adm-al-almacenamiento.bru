@@ -1,0 +1,25 @@
+meta {
+  name: Subir el PDF de d2_nota_adm al almacenamiento
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{uploadUrl}}
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/pdf
+}
+
+body:text {
+  {{pdfValido}}
+}
+
+tests {
+  test("el almacenamiento recibe el archivo (200)", function () {
+    expect(res.status).to.equal(200);
+  });
+}

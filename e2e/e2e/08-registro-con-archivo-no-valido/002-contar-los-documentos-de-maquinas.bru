@@ -1,0 +1,25 @@
+meta {
+  name: Contar los documentos de Máquinas
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+script:post-response {
+  bru.setVar("cantidadInicial", res.body.documentos.length);
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

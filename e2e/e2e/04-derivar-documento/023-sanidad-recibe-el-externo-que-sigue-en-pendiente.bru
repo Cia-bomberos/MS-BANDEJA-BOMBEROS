@@ -1,0 +1,28 @@
+meta {
+  name: Sanidad recibe el externo, que sigue en Pendiente
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d4_externo}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Pendiente, a cargo de Sanidad", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+    expect(res.body.seccion_responsable).to.equal("Sanidad");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+}

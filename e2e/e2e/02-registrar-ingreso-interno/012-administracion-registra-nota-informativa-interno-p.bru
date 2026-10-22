@@ -1,0 +1,56 @@
+meta {
+  name: Administración registra Nota Informativa interno, prioridad Media d2_nota_adm
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_administracion}}
+}
+
+body:json {
+  {
+    "origen": "interno",
+    "tipo": "Nota Informativa",
+    "asunto": "Nota Informativa de Administración: requerimiento de equipos de protección personal",
+    "fecha_limite": "{{fecha_30}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d2_nota_adm", res.body.id);
+  if (res.body) bru.setVar("d2_nota_admCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Nota Informativa de Administración: requerimiento de equipos de protección personal");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_30"));
+  });
+  test("prioridad Media por plazo de 30 días", function () {
+    expect(res.body.prioridad).to.equal("Media");
+  });
+  test("registro completo del tipo Nota Informativa con código institucional", function () {
+    expect(res.body.modalidad).to.equal("completo");
+    expect(res.body.tipo).to.equal("Nota Informativa");
+    expect(res.body.codigo_unico).to.match(/^NOTA INFORMATIVA N° \d{3}-\d{4}\/CGBVP\/IVCDLC\/B3$/);
+  });
+  test("el código lleva el año en curso de Lima", function () {
+    expect(res.body.codigo_unico).to.contain("-" + bru.getVar("anioLima") + "/");
+  });
+}

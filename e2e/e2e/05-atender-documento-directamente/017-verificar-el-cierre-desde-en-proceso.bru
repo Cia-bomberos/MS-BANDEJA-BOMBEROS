@@ -1,0 +1,33 @@
+meta {
+  name: Verificar el cierre desde En proceso
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d5_en_proceso}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Atendido, a cargo de Sanidad", function () {
+    expect(res.body.estado).to.equal("Atendido");
+    expect(res.body.seccion_responsable).to.equal("Sanidad");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("la atención de Sanidad guarda su nota «Sanidad concluye la evaluación del personal.»", function () {
+    const x = (res.body.historial || []).filter(h => h.accion === "atendido")[0];
+    expect(x, "atendido número 1 en el historial").to.exist;
+    expect(JSON.stringify(x)).to.contain("Sanidad concluye la evaluación del personal.");
+  });
+}

@@ -1,0 +1,41 @@
+meta {
+  name: Sanidad ve el recorrido completo con sus notas
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d4_cadena}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado En proceso, a cargo de Sanidad", function () {
+    expect(res.body.estado).to.equal("En proceso");
+    expect(res.body.seccion_responsable).to.equal("Sanidad");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("dos derivaciones en orden: Máquinas y luego Administración", function () {
+    expect((res.body.historial || []).filter(h => h.accion === "derivacion").map(h => h.seccion)).to.deep.equal(["Maquinas", "Administracion"]);
+  });
+  test("la derivación de Máquinas guarda su nota «Revisar el presupuesto para la compra de equipos.»", function () {
+    const x = (res.body.historial || []).filter(h => h.accion === "derivacion")[0];
+    expect(x, "derivacion número 1 en el historial").to.exist;
+    expect(JSON.stringify(x)).to.contain("Revisar el presupuesto para la compra de equipos.");
+  });
+  test("la derivación de Administración guarda su nota «Evaluar si los equipos cumplen la norma de salud ocupacional.»", function () {
+    const x = (res.body.historial || []).filter(h => h.accion === "derivacion")[1];
+    expect(x, "derivacion número 2 en el historial").to.exist;
+    expect(JSON.stringify(x)).to.contain("Evaluar si los equipos cumplen la norma de salud ocupacional.");
+  });
+}

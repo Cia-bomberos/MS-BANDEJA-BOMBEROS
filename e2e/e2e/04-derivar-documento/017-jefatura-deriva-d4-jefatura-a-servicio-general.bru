@@ -1,0 +1,28 @@
+meta {
+  name: Jefatura deriva d4_jefatura a Servicio General
+  type: http
+  seq: 17
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d4_jefatura}}/derivar
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_jefatura}}
+}
+
+body:json {
+  {"seccion_destino": "ServicioGeneral", "nota": "La Jefatura asigna el documento a Servicio General."}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("la sección responsable pasa a Servicio General", function () {
+    expect(res.body.seccion_responsable).to.equal("ServicioGeneral");
+  });
+}

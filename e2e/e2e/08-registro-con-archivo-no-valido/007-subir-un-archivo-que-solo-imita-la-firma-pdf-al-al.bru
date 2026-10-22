@@ -1,0 +1,25 @@
+meta {
+  name: Subir un archivo que solo imita la firma PDF al almacenamiento
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{uploadUrl}}
+  body: text
+  auth: none
+}
+
+headers {
+  Content-Type: application/pdf
+}
+
+body:text {
+  {{firmaFalsa}}
+}
+
+tests {
+  test("el almacenamiento recibe el archivo (200)", function () {
+    expect(res.status).to.equal(200);
+  });
+}

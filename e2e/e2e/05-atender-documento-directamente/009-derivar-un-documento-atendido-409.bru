@@ -1,0 +1,28 @@
+meta {
+  name: Derivar un documento Atendido (409)
+  type: http
+  seq: 9
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d5_pendiente}}/derivar
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+body:json {
+  {"seccion_destino": "Sanidad", "nota": "Derivar lo atendido."}
+}
+
+tests {
+  test("responde 409", function () {
+    expect(res.status).to.equal(409);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

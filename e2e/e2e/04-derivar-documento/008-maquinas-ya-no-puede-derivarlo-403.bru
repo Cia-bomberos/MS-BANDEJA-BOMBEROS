@@ -1,0 +1,28 @@
+meta {
+  name: Máquinas ya no puede derivarlo (403)
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/documentos/{{d4_cadena}}/derivar
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"seccion_destino": "Sanidad", "nota": "Otra vez."}
+}
+
+tests {
+  test("responde 403", function () {
+    expect(res.status).to.equal(403);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Registrar el envío sin destinatario (400)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d6_pendiente}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"medio": "Correo institucional", "destinatario": "   "}
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("el mensaje se refiere a destinatario", function () {
+    expect(res.body.error).to.match(/destinatario/i);
+  });
+}

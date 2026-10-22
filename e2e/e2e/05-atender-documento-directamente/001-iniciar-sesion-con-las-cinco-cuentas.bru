@@ -1,0 +1,173 @@
+meta {
+  name: Iniciar sesión con las cinco cuentas
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+script:pre-request {
+  bru.setVar("loginError", "");
+
+      // Login real en Cognito dentro del script: la contraseña y el token no quedan en los reportes.
+      {
+        const usuario = bru.getProcessEnv("E2E_JEFATURA_USUARIO");
+        const clave = bru.getProcessEnv("E2E_JEFATURA_PASSWORD");
+        if (!usuario || !clave) {
+          bru.setVar("loginError", "Faltan las variables E2E_JEFATURA_USUARIO / E2E_JEFATURA_PASSWORD");
+        } else {
+          try {
+    const r = await bru.sendRequest({
+      method: "POST",
+      url: "https://cognito-idp.us-east-1.amazonaws.com/",
+      headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      data: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: bru.getEnvVar("cognitoClientId"),
+                             AuthParameters: { USERNAME: usuario, PASSWORD: clave } })
+    });
+    const datos = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+
+            if (datos.ChallengeName) bru.setVar("loginError", "La cuenta jefatura pide el reto " + datos.ChallengeName);
+            else {
+              bru.setVar("token_jefatura", datos.AuthenticationResult.IdToken);
+              bru.setVar("token", datos.AuthenticationResult.IdToken);
+              bru.setVar("tokenAcceso_jefatura", datos.AuthenticationResult.AccessToken);
+            }
+          } catch (e) {
+            bru.setVar("loginError", "Cognito rechazó el login de jefatura (HTTP " + e.status + ")");
+          }
+        }
+      }
+
+      // Login real en Cognito dentro del script: la contraseña y el token no quedan en los reportes.
+      {
+        const usuario = bru.getProcessEnv("E2E_ADMINISTRACION_USUARIO");
+        const clave = bru.getProcessEnv("E2E_ADMINISTRACION_PASSWORD");
+        if (!usuario || !clave) {
+          bru.setVar("loginError", "Faltan las variables E2E_ADMINISTRACION_USUARIO / E2E_ADMINISTRACION_PASSWORD");
+        } else {
+          try {
+    const r = await bru.sendRequest({
+      method: "POST",
+      url: "https://cognito-idp.us-east-1.amazonaws.com/",
+      headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      data: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: bru.getEnvVar("cognitoClientId"),
+                             AuthParameters: { USERNAME: usuario, PASSWORD: clave } })
+    });
+    const datos = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+
+            if (datos.ChallengeName) bru.setVar("loginError", "La cuenta administracion pide el reto " + datos.ChallengeName);
+            else {
+              bru.setVar("token_administracion", datos.AuthenticationResult.IdToken);
+              bru.setVar("token", datos.AuthenticationResult.IdToken);
+              bru.setVar("tokenAcceso_administracion", datos.AuthenticationResult.AccessToken);
+            }
+          } catch (e) {
+            bru.setVar("loginError", "Cognito rechazó el login de administracion (HTTP " + e.status + ")");
+          }
+        }
+      }
+
+      // Login real en Cognito dentro del script: la contraseña y el token no quedan en los reportes.
+      {
+        const usuario = bru.getProcessEnv("E2E_SERVICIOGENERAL_USUARIO");
+        const clave = bru.getProcessEnv("E2E_SERVICIOGENERAL_PASSWORD");
+        if (!usuario || !clave) {
+          bru.setVar("loginError", "Faltan las variables E2E_SERVICIOGENERAL_USUARIO / E2E_SERVICIOGENERAL_PASSWORD");
+        } else {
+          try {
+    const r = await bru.sendRequest({
+      method: "POST",
+      url: "https://cognito-idp.us-east-1.amazonaws.com/",
+      headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      data: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: bru.getEnvVar("cognitoClientId"),
+                             AuthParameters: { USERNAME: usuario, PASSWORD: clave } })
+    });
+    const datos = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+
+            if (datos.ChallengeName) bru.setVar("loginError", "La cuenta serviciogeneral pide el reto " + datos.ChallengeName);
+            else {
+              bru.setVar("token_serviciogeneral", datos.AuthenticationResult.IdToken);
+              bru.setVar("token", datos.AuthenticationResult.IdToken);
+              bru.setVar("tokenAcceso_serviciogeneral", datos.AuthenticationResult.AccessToken);
+            }
+          } catch (e) {
+            bru.setVar("loginError", "Cognito rechazó el login de serviciogeneral (HTTP " + e.status + ")");
+          }
+        }
+      }
+
+      // Login real en Cognito dentro del script: la contraseña y el token no quedan en los reportes.
+      {
+        const usuario = bru.getProcessEnv("E2E_MAQUINAS_USUARIO");
+        const clave = bru.getProcessEnv("E2E_MAQUINAS_PASSWORD");
+        if (!usuario || !clave) {
+          bru.setVar("loginError", "Faltan las variables E2E_MAQUINAS_USUARIO / E2E_MAQUINAS_PASSWORD");
+        } else {
+          try {
+    const r = await bru.sendRequest({
+      method: "POST",
+      url: "https://cognito-idp.us-east-1.amazonaws.com/",
+      headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      data: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: bru.getEnvVar("cognitoClientId"),
+                             AuthParameters: { USERNAME: usuario, PASSWORD: clave } })
+    });
+    const datos = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+
+            if (datos.ChallengeName) bru.setVar("loginError", "La cuenta maquinas pide el reto " + datos.ChallengeName);
+            else {
+              bru.setVar("token_maquinas", datos.AuthenticationResult.IdToken);
+              bru.setVar("token", datos.AuthenticationResult.IdToken);
+              bru.setVar("tokenAcceso_maquinas", datos.AuthenticationResult.AccessToken);
+            }
+          } catch (e) {
+            bru.setVar("loginError", "Cognito rechazó el login de maquinas (HTTP " + e.status + ")");
+          }
+        }
+      }
+
+      // Login real en Cognito dentro del script: la contraseña y el token no quedan en los reportes.
+      {
+        const usuario = bru.getProcessEnv("E2E_SANIDAD_USUARIO");
+        const clave = bru.getProcessEnv("E2E_SANIDAD_PASSWORD");
+        if (!usuario || !clave) {
+          bru.setVar("loginError", "Faltan las variables E2E_SANIDAD_USUARIO / E2E_SANIDAD_PASSWORD");
+        } else {
+          try {
+    const r = await bru.sendRequest({
+      method: "POST",
+      url: "https://cognito-idp.us-east-1.amazonaws.com/",
+      headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      data: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: bru.getEnvVar("cognitoClientId"),
+                             AuthParameters: { USERNAME: usuario, PASSWORD: clave } })
+    });
+    const datos = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+
+            if (datos.ChallengeName) bru.setVar("loginError", "La cuenta sanidad pide el reto " + datos.ChallengeName);
+            else {
+              bru.setVar("token_sanidad", datos.AuthenticationResult.IdToken);
+              bru.setVar("token", datos.AuthenticationResult.IdToken);
+              bru.setVar("tokenAcceso_sanidad", datos.AuthenticationResult.AccessToken);
+            }
+          } catch (e) {
+            bru.setVar("loginError", "Cognito rechazó el login de sanidad (HTTP " + e.status + ")");
+          }
+        }
+      }
+}
+
+tests {
+  test("las cinco cuentas iniciaron sesión", function () {
+    expect(bru.getVar("loginError") || "", bru.getVar("loginError")).to.equal("");
+  });
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

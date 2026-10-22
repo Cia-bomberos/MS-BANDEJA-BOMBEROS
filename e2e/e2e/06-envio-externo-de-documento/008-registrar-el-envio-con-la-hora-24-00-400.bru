@@ -1,0 +1,31 @@
+meta {
+  name: Registrar el envío con la hora 24:00 (400)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d6_pendiente}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {"medio": "Correo institucional", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro", "hora_envio": "24:00"}
+}
+
+tests {
+  test("responde 400", function () {
+    expect(res.status).to.equal(400);
+  });
+  test("explica el motivo con un mensaje", function () {
+    expect(res.body.error).to.be.a("string").and.not.empty;
+  });
+  test("el mensaje se refiere a hora", function () {
+    expect(res.body.error).to.match(/hora/i);
+  });
+}

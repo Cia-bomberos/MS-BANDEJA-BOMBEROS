@@ -1,0 +1,52 @@
+meta {
+  name: Máquinas registra un documento externo, prioridad Media d4_externo
+  type: http
+  seq: 21
+}
+
+post {
+  url: {{baseUrl}}/documentos
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_maquinas}}
+}
+
+body:json {
+  {
+    "origen": "externo",
+    "asunto": "Invitación externa recibida por Máquinas para capacitación",
+    "fecha_limite": "{{fecha_20}}",
+    "archivo_s3_key": "{{archivoKey}}"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.id) bru.setVar("d4_externo", res.body.id);
+  if (res.body) bru.setVar("d4_externoCodigo", res.body.codigo_unico);
+}
+
+tests {
+  test("responde 201", function () {
+    expect(res.status).to.equal(201);
+  });
+  test("queda en estado Pendiente", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+  });
+  test("guarda el asunto ingresado", function () {
+    expect(res.body.asunto).to.equal("Invitación externa recibida por Máquinas para capacitación");
+  });
+  test("guarda la fecha límite ingresada", function () {
+    expect(res.body.fecha_limite).to.equal(bru.getVar("fecha_20"));
+  });
+  test("prioridad Media por plazo de 20 días", function () {
+    expect(res.body.prioridad).to.equal("Media");
+  });
+  test("registro simplificado sin tipo ni código", function () {
+    expect(res.body.modalidad).to.equal("simplificado");
+    expect(res.body.tipo).to.equal(null);
+    expect(res.body.codigo_unico).to.equal(null);
+  });
+}

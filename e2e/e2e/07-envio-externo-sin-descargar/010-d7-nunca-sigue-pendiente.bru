@@ -1,0 +1,31 @@
+meta {
+  name: d7_nunca sigue Pendiente
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/documentos/{{d7_nunca}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("estado Pendiente, a cargo de Sanidad", function () {
+    expect(res.body.estado).to.equal("Pendiente");
+    expect(res.body.seccion_responsable).to.equal("Sanidad");
+  });
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
+  });
+  test("no hay envío en el historial", function () {
+    expect((res.body.historial || []).map(h => h.accion)).to.not.include("envio_externo");
+  });
+}

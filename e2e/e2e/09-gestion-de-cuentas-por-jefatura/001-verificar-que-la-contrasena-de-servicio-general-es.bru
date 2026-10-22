@@ -1,0 +1,60 @@
+meta {
+  name: Verificar que la contraseña de Servicio General es la actual
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/documentos
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: {{token_serviciogeneral}}
+}
+
+script:pre-request {
+  bru.setVar("loginError", "");
+  bru.setVar("claveSGVerificada", "no");
+
+      // Login real en Cognito dentro del script: la contraseña y el token no quedan en los reportes.
+      {
+        const usuario = bru.getProcessEnv("E2E_SERVICIOGENERAL_USUARIO");
+        const clave = bru.getProcessEnv("E2E_SERVICIOGENERAL_PASSWORD");
+        if (!usuario || !clave) {
+          bru.setVar("loginError", "Faltan las variables E2E_SERVICIOGENERAL_USUARIO / E2E_SERVICIOGENERAL_PASSWORD");
+        } else {
+          try {
+    const r = await bru.sendRequest({
+      method: "POST",
+      url: "https://cognito-idp.us-east-1.amazonaws.com/",
+      headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      data: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: bru.getEnvVar("cognitoClientId"),
+                             AuthParameters: { USERNAME: usuario, PASSWORD: clave } })
+    });
+    const datos = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+
+            if (datos.ChallengeName) bru.setVar("loginError", "La cuenta serviciogeneral pide el reto " + datos.ChallengeName);
+            else {
+              bru.setVar("token_serviciogeneral", datos.AuthenticationResult.IdToken);
+              bru.setVar("token", datos.AuthenticationResult.IdToken);
+              bru.setVar("tokenAcceso_serviciogeneral", datos.AuthenticationResult.AccessToken);
+            }
+          } catch (e) {
+            bru.setVar("loginError", "Cognito rechazó el login de serviciogeneral (HTTP " + e.status + ")");
+          }
+        }
+      }
+
+  if (!bru.getVar("loginError")) bru.setVar("claveSGVerificada", "si");
+}
+
+tests {
+  test("Servicio General inicia sesión con la contraseña de las credenciales", function () {
+    expect(bru.getVar("claveSGVerificada"), bru.getVar("loginError")).to.equal("si");
+  });
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}

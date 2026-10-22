@@ -1,0 +1,25 @@
+meta {
+  name: Jefe de Sanidad registra el envío externo de d6_en_proceso por Courier
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/documentos/{{d6_en_proceso}}/envio-externo
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: {{token_sanidad}}
+}
+
+body:json {
+  {"medio": "Courier", "destinatario": "CGBVP - IV Comandancia Departamental Lima Centro", "fecha_envio": "{{fechaIsoHoy}}", "hora_envio": "09:30"}
+}
+
+tests {
+  test("responde 200", function () {
+    expect(res.status).to.equal(200);
+  });
+}
