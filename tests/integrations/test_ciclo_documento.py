@@ -95,12 +95,73 @@ def test_archivado_automatico_y_eliminacion(bd, registrar, llamar, consulta, mon
     assert llamar(handler.marcar_atendido, "Jefe_Maquinas", id=doc["id"])[0] == 200
     consulta("UPDATE documentos SET atendido_en = now() - interval '4 days' WHERE id = %s", (doc["id"],))
 
-    monkeypatch.setattr(scheduled, "_subir_a_drive", lambda *a: True)  # Drive real no se prueba aqui
+    monkeypatch.setattr(  # Drive real no se prueba aqui
+        scheduled, "_subir_a_drive", lambda *a: {"file_id": "drv-1", "folder_id": "mes-1"}
+    )
     assert scheduled.archivar_documentos({}, None)["archivados"] == 1
-    fila = consulta("SELECT estado, confirmado_drive FROM documentos WHERE id = %s", (doc["id"],))[0]
+    fila = consulta(
+        "SELECT estado, confirmado_drive, drive_file_id, drive_folder_id, respaldado_en FROM documentos WHERE id = %s",
+        (doc["id"],),
+    )[0]
     assert fila["estado"] == "Archivado"
     assert fila["confirmado_drive"] is True
+    assert (fila["drive_file_id"], fila["drive_folder_id"]) == ("drv-1", "mes-1")
+    assert fila["respaldado_en"] is not None
 
     assert llamar(handler.eliminar_documento, "Jefe_Maquinas", id=doc["id"])[0] == 403
     assert llamar(handler.eliminar_documento, "Jefe_Administracion", id=doc["id"])[0] == 200
     assert consulta("SELECT count(*) AS n FROM documentos")[0]["n"] == 0
+
+
+# --- Carpeta de Drive configurable (RN-0027) ------------------------------------------
+
+ID_CARPETA = "1AbCdEfGhIjKlMnOpQrStUvWxYz_-0123"
+
+
+@pytest.fixture
+def drive_falso(monkeypatch):
+    from modulo_documentos import drive
+    monkeypatch.setattr(drive, "_token", lambda s3=None: "tok")
+    monkeypatch.setattr(drive, "cuenta_respaldo", lambda token: "respaldo@gmail.com")
+    monkeypatch.setattr(drive, "verificar_carpeta", lambda fid, token: {"id": fid, "nombre": "SOFTWARE_BOMBEROS"})
+
+
+def test_la_migracion_002_se_puede_aplicar_dos_veces(bd):
+    import pathlib
+    sql = (pathlib.Path(__file__).resolve().parents[2] / "migrations" / "002_drive.sql").read_text(encoding="utf-8")
+    with bd.cursor() as cur:
+        cur.execute(sql)
+        cur.execute(sql)
+
+
+def test_configurar_carpeta_la_guarda_y_el_archivador_la_usa(bd, registrar, llamar, consulta, drive_falso, monkeypatch):
+    from modulo_documentos import configuracion
+    enlace = f"https://drive.google.com/drive/folders/{ID_CARPETA}?usp=sharing"
+
+    # Solo el Jefe de Administración puede
+    assert llamar(configuracion.guardar_config_drive, "Jefatura", body={"enlace": enlace})[0] == 403
+    estado, cuerpo = llamar(configuracion.guardar_config_drive, "Jefe_Administracion", body={"enlace": enlace})
+    assert estado == 200 and cuerpo["carpeta_id"] == ID_CARPETA
+    estado, cuerpo = llamar(configuracion.obtener_config_drive, "Jefe_Administracion")
+    assert (estado, cuerpo["carpeta_nombre"], cuerpo["origen"]) == (200, "SOFTWARE_BOMBEROS", "configuracion")
+
+    # Actualizar reemplaza la fila (no la duplica)
+    otro = "1ZyXwVuTsRqPoNmLkJiHgFeDcBa_-9876"
+    assert llamar(configuracion.guardar_config_drive, "Jefe_Administracion", body={"enlace": otro})[0] == 200
+    assert consulta("SELECT count(*) AS n FROM configuracion")[0]["n"] == 1
+
+    # El archivador respalda en la carpeta configurada, con la fecha de registro del documento
+    doc = registrar()
+    assert llamar(handler.marcar_atendido, "Jefe_Maquinas", id=doc["id"])[0] == 200
+    consulta("UPDATE documentos SET atendido_en = now() - interval '4 days' WHERE id = %s", (doc["id"],))
+    vistas = {}
+
+    def _respaldar(documento_id, codigo, key, fecha=None, raiz=None, **k):
+        vistas.update(raiz=raiz, fecha=fecha)
+        return {"file_id": "drv-1", "folder_id": "mes-1"}
+
+    monkeypatch.setattr(scheduled.drive, "respaldar", _respaldar)
+    assert scheduled.archivar_documentos({}, None)["archivados"] == 1
+    assert vistas["raiz"] == otro
+    registro = consulta("SELECT fecha_creacion FROM documentos WHERE id = %s", (doc["id"],))[0]["fecha_creacion"]
+    assert vistas["fecha"] == registro

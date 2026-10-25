@@ -176,6 +176,28 @@ functions:
           cors: true
           authorizer: *cognitoAuthorizer
 
+  # --- Configuración de Drive (solo Jefe de Administración) ---
+
+  obtenerConfigDrive:
+    handler: modulo_documentos/configuracion.obtener_config_drive
+    timeout: 30
+    events:
+      - http:
+          path: configuracion/drive
+          method: get
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  guardarConfigDrive:
+    handler: modulo_documentos/configuracion.guardar_config_drive
+    timeout: 30
+    events:
+      - http:
+          path: configuracion/drive
+          method: put
+          cors: true
+          authorizer: *cognitoAuthorizer
+
   # --- Jobs programados (RN-0017, RN-0026/0027) ---
 
   reclasificarPrioridades:

@@ -138,6 +138,22 @@ la condición de RN-0028 para poder eliminar un documento.
   `confirmado_drive = false`, y **cada corrida del job lo reintenta** hasta que Drive
   lo confirme. Un reintento no duplica archivos (se busca por nombre antes de subir).
 - Nombre en Drive: el código único (`OFICIO N° 001-2026-...pdf`) o el id del documento.
+- **Carpetas por año y mes.** Dentro de la carpeta raíz cada PDF va a `<Año>/<MM - Mes>/`
+  (p. ej. `2026/10 - Octubre/`), según la **fecha de registro** del documento (hora de Lima),
+  no la de archivado; así un reintento cae siempre en la misma carpeta. Las subcarpetas se
+  crean la primera vez que hacen falta. El respaldo sigue ocurriendo **al archivar** (RN-0027).
+- **Dónde quedó cada documento.** Al confirmarse se guardan `drive_file_id`,
+  `drive_folder_id` y `respaldado_en` (migración `002_drive.sql`).
+
+**Carpeta raíz configurable (solo Jefe de Administración).** `GET`/`PUT /configuracion/drive`.
+El PUT recibe `{"enlace": "https://drive.google.com/drive/folders/<ID>"}`, extrae el ID,
+comprueba contra Drive que la carpeta existe y que la cuenta de respaldo puede escribir en ella
+(400 enlace inválido, 422 carpeta inaccesible o solo lectura, 502 Google/credenciales), y la guarda
+en la tabla `configuracion` de **ese ambiente** (dev, qa y uat tienen cada uno la suya). El GET
+devuelve además `cuenta_respaldo`: el correo con el que hay que compartir la carpeta como **Editor**.
+`DRIVE_FOLDER_ID` queda solo como valor por defecto mientras nadie configure nada. Cambiar de
+carpeta no mueve lo ya archivado; los respaldos nuevos y los reintentos usan la vigente.
+Las credenciales con que se escribe (OAuth, abajo) siguen en S3: el front solo maneja el enlace.
 - Timeout de 20 s por llamada a Google (RNF-0009); el job no se cuelga por Drive.
 
 **Por qué OAuth y no cuenta de servicio.** La carpeta de respaldo está en un Gmail
@@ -170,8 +186,8 @@ y no en variables de entorno porque Lambda limita todas las variables a 4 KB.
 
 ### Tests
 
-156 tests, 97% de cobertura sobre `modulo_documentos/` (100% en `auth`, `codigo`,
-`prioridad`, `s3util`, `drive` y `scheduled`; ~97% en `handler`). La BD, S3 y Google Drive se
+238 tests unitarios más 9 de integración (PostgreSQL real, `TEST_DB_HOST`), ~95% de cobertura
+sobre `modulo_documentos/` (100% en `drive`, `scheduled` y `configuracion`). La BD, S3 y Google Drive se
 mockean: los tests no tocan servicios reales. Ejecutar con
 `pytest tests/ --cov=modulo_documentos`.
 
