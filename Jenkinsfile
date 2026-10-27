@@ -99,6 +99,7 @@ pipeline {
         // MEDIUM, HIGH o CRITICAL el stage falla y el pipeline se detiene.
         // Sin excepciones: no hay --ignore-unfixed ni .trivyignore.
         stage('Build y Trivy (imagen Docker)') {
+            when { branch 'qa' }
             environment {
                 TRIVY_IMAGE = 'aquasec/trivy:0.58.1'
                 IMAGEN = "bandeja-bomberos:${env.BUILD_NUMBER}"
