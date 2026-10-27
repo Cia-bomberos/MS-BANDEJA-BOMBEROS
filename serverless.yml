@@ -3,13 +3,7 @@ service: bomberos-f3-bandeja
 plugins:
   - serverless-python-requirements
 
-# Anchor reutilizado en el "authorizer:" de cada función HTTP (evita repetir
-# el mismo bloque 11 veces). Debe declararse antes de cualquier *alias que
-# lo use, por eso va al principio del archivo.
 custom:
-  # ARN del User Pool que valida el authorizer. Si se define USER_POOL_ARN
-  # (ej. el pool de seguridad que vive en OTRA cuenta de AWS Academy), se usa
-  # ese. Si no, cae al pool del stack de seguridad de esta misma cuenta.
   userPoolArn: ${env:USER_POOL_ARN, self:custom.localUserPoolArn}
   localUserPoolArn: arn:aws:cognito-idp:${aws:region}:${aws:accountId}:userpool/${cf:bomberos-f3-backend-${sls:stage}.UserPoolId}
 
@@ -19,16 +13,6 @@ custom:
     authorizerId:
       Ref: ApiGatewayAuthorizer
 
-  # psycopg2 tiene extensión en C y no es portable tal cual a Lambda: hay que
-  # empaquetarlo para Amazon Linux. 'non-linux' hace esto automático para
-  # los dos casos que usamos:
-  #   - Deploy desde Jenkins (agente Linux x86_64, igual al runtime de
-  #     Lambda): NO dockeriza, pip instala directo y el wheel manylinux ya
-  #     es compatible -- deploy mas rapido, sin Docker-in-Docker.
-  #   - Deploy manual desde Windows/Mac (ej. para probar algo sin esperar a
-  #     Jenkins): SI dockeriza (necesita Docker Desktop corriendo), porque
-  #     ahi un pip install directo traeria el wheel de Windows/Mac, no el
-  #     de Linux, y el Lambda fallaria en runtime igual que al principio.
   pythonRequirements:
     dockerizePip: 'non-linux'
     slim: true
@@ -52,7 +36,6 @@ provider:
     DB_PASSWORD: ${env:DB_PASSWORD}
     DOCUMENTS_BUCKET: !Ref DocumentsBucket
     DOCUMENTS_BUCKET_OWNER: ${aws:accountId}
-    # Carpeta de Google Drive para el respaldo de archivados (RN-0027). Vacio = sin respaldo.
     DRIVE_FOLDER_ID: ${env:DRIVE_FOLDER_ID, ''}
 
 package:
@@ -73,6 +56,7 @@ functions:
       - http:
           path: openapi.json
           method: get
+
   solicitarUrlSubida:
     handler: modulo_documentos/handler.solicitar_url_subida
     events:
@@ -131,11 +115,29 @@ functions:
           cors: true
           authorizer: *cognitoAuthorizer
 
+  marcarEnProceso:
+    handler: modulo_documentos/handler.marcar_en_proceso
+    events:
+      - http:
+          path: documentos/{id}/en-proceso
+          method: patch
+          cors: true
+          authorizer: *cognitoAuthorizer
+
   marcarAtendido:
     handler: modulo_documentos/handler.marcar_atendido
     events:
       - http:
           path: documentos/{id}/atender
+          method: patch
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  archivarDocumento:
+    handler: modulo_documentos/handler.archivar_documento
+    events:
+      - http:
+          path: documentos/{id}/archivar
           method: patch
           cors: true
           authorizer: *cognitoAuthorizer
@@ -176,7 +178,25 @@ functions:
           cors: true
           authorizer: *cognitoAuthorizer
 
-  # --- Jobs programados (RN-0017, RN-0026/0027) ---
+  obtenerConfigDrive:
+    handler: modulo_documentos/configuracion.obtener_config_drive
+    timeout: 30
+    events:
+      - http:
+          path: configuracion/drive
+          method: get
+          cors: true
+          authorizer: *cognitoAuthorizer
+
+  guardarConfigDrive:
+    handler: modulo_documentos/configuracion.guardar_config_drive
+    timeout: 30
+    events:
+      - http:
+          path: configuracion/drive
+          method: put
+          cors: true
+          authorizer: *cognitoAuthorizer
 
   reclasificarPrioridades:
     handler: modulo_documentos/scheduled.reclasificar_prioridades
@@ -185,7 +205,6 @@ functions:
 
   archivarDocumentos:
     handler: modulo_documentos/scheduled.archivar_documentos
-    # Descarga cada PDF de S3 y lo sube a Drive: necesita mas margen que un endpoint.
     timeout: 120
     memorySize: 512
     events:
@@ -193,10 +212,6 @@ functions:
 
 resources:
   Resources:
-
-    # ---------- Autorizador de API Gateway basado en Cognito ----------
-    # Reutiliza el User Pool de MS-SEGURIDAD-BOMBEROS (mismo stage) en vez
-    # de crear uno nuevo, vía cross-stack reference (${cf:...}).
     ApiGatewayAuthorizer:
       Type: AWS::ApiGateway::Authorizer
       Properties:
@@ -207,12 +222,10 @@ resources:
         ProviderARNs:
           - ${self:custom.userPoolArn}
 
-    # ---------- Bucket de documentos (PDFs) ----------
     DocumentsBucket:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: bomberos-documentos-${sls:stage}-${aws:accountId}
-        # Privado: se accede solo vía URLs pre-firmadas (subida y descarga).
         PublicAccessBlockConfiguration:
           BlockPublicAcls: true
           BlockPublicPolicy: true
@@ -223,9 +236,6 @@ resources:
             - AllowedMethods: [GET, PUT]
               AllowedOrigins: ['*']
               AllowedHeaders: ['*']
-        # Las subidas llegan a "pendientes/" y solo pasan a "documentos/" cuando el
-        # backend valida el PDF al registrar. Lo que nunca se registra (o se rechaza)
-        # se borra solo a las 24 h, así el bucket no se llena de archivos huérfanos.
         LifecycleConfiguration:
           Rules:
             - Id: expirar-subidas-pendientes

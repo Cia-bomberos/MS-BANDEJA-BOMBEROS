@@ -273,6 +273,44 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
 
+  /configuracion/drive:
+    get:
+      operationId: obtenerConfigDrive
+      summary: Carpeta de Google Drive configurada para el respaldo (solo Jefe de Administracion)
+      responses:
+        "200":
+          description: Estado de la configuracion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigDrive" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    put:
+      operationId: guardarConfigDrive
+      summary: Registra o actualiza el enlace de la carpeta de Drive (solo Jefe de Administracion)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enlace]
+              properties:
+                enlace:
+                  type: string
+                  example: https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz
+      responses:
+        "200":
+          description: Configuracion guardada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigDrive" }
+        "400": { description: Enlace ausente o no es de una carpeta de Drive }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "422": { description: La carpeta no existe o la cuenta de respaldo no puede escribir en ella }
+        "502": { description: No se pudo autenticar o consultar Google Drive }
+
 components:
   securitySchemes:
     cognito:
@@ -322,6 +360,17 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    ConfigDrive:
+      type: object
+      properties:
+        configurado: { type: boolean }
+        origen: { type: string, nullable: true }
+        carpeta_id: { type: string, nullable: true }
+        carpeta_nombre: { type: string, nullable: true }
+        enlace: { type: string, nullable: true }
+        actualizado_por: { type: string, nullable: true }
+        actualizado_en: { type: string, nullable: true }
+        cuenta_respaldo: { type: string, nullable: true }
     Error:
       type: object
       properties:
