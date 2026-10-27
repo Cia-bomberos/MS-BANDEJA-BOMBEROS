@@ -8,19 +8,14 @@ pipeline {
         skipDefaultCheckout(true)
     }
 
-    // Credenciales dinámicas de AWS Learner Lab (rotan periódicamente) y de
-    // la BD propia del equipo (mismo .env que se le pasa a Nico). Todas
-    // opcionales: sin credenciales de AWS el deploy se omite y solo corren.
-    // tests + SonarQube (igual que en MS-SEGURIDAD-BOMBEROS).
+    // Datos de la BD propia del equipo para aplicar migraciones (opcionales:
+    // sin DB_HOST el stage de migraciones se omite). El deploy ya no corre
+    // en este pipeline.
     parameters {
-        string(name: 'AWS_ACCESS_KEY_ID', defaultValue: '', description: 'Access Key de AWS Learner Lab')
-        password(name: 'AWS_SECRET_ACCESS_KEY', defaultValue: '', description: 'Secret Access Key de AWS Learner Lab')
-        password(name: 'AWS_SESSION_TOKEN', defaultValue: '', description: 'Session Token de AWS Learner Lab')
         string(name: 'DB_HOST', defaultValue: '', description: 'Endpoint del RDS propio del equipo')
         string(name: 'DB_NAME', defaultValue: '', description: 'Nombre de la BD del stage a desplegar (dev/qa/uat/prod)')
         string(name: 'DB_USER', defaultValue: '', description: 'Usuario de conexión al RDS')
         password(name: 'DB_PASSWORD', defaultValue: '', description: 'Password de conexión al RDS')
-        string(name: 'DRIVE_FOLDER_ID', defaultValue: '', description: 'ID de la carpeta de Google Drive para el respaldo de documentos archivados (vacío = sin respaldo)')
     }
 
     stages {
@@ -99,6 +94,42 @@ pipeline {
             }
         }
 
+        // Trivy: se construye la imagen del backend y se escanea ANTES de
+        // cualquier migración o deploy. Solo se tolera severidad LOW: si hay
+        // MEDIUM, HIGH o CRITICAL el stage falla y el pipeline se detiene.
+        // Sin excepciones: no hay --ignore-unfixed ni .trivyignore.
+        stage('Build y Trivy (imagen Docker)') {
+            when { branch 'qa' }
+            environment {
+                TRIVY_IMAGE = 'aquasec/trivy:0.58.1'
+                IMAGEN = "bandeja-bomberos:${env.BUILD_NUMBER}"
+            }
+            steps {
+                sh '''
+                    set -e
+                    docker build -t "$IMAGEN" .
+
+                    TRIVY="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ ${TRIVY_IMAGE}"
+
+                    # 1) Reporte HTML (siempre se genera, para los artifacts y la presentación)
+                    $TRIVY image --scanners vuln --severity LOW,MEDIUM,HIGH,CRITICAL \
+                        --format template --template "@/contrib/html.tpl" \
+                        "$IMAGEN" > trivy-report.html
+
+                    # 2) Compuerta: MEDIUM, HIGH o CRITICAL detienen el pipeline
+                    $TRIVY image --scanners vuln --severity MEDIUM,HIGH,CRITICAL \
+                        --exit-code 1 --no-progress \
+                        "$IMAGEN"
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true
+                    sh "docker rmi -f bandeja-bomberos:${env.BUILD_NUMBER} || true"
+                }
+            }
+        }
+
         stage('Aplicar Migraciones (RDS)') {
             when {
                 allOf {
@@ -126,32 +157,6 @@ pipeline {
                     '''
                 }
             }
-        }
-
-        stage('Deploy omitido (sin credenciales)') {
-            when {
-                allOf {
-                    expression { params.AWS_ACCESS_KEY_ID?.trim() == '' }
-                    anyOf { branch 'development'; branch 'qa'; branch 'uat'; branch 'main' }
-                }
-            }
-            steps {
-                echo 'No se pasaron credenciales de AWS Learner Lab (Build with Parameters). Se omite el deploy; solo corrieron tests y SonarQube.'
-            }
-        }
-
-        stage('Deploy Dev') {
-            when {
-                allOf { branch 'development'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
-            }
-            steps { executeServerlessDeploy('dev') }
-        }
-
-        stage('Deploy QA') {
-            when {
-                allOf { branch 'qa'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
-            }
-            steps { executeServerlessDeploy('qa') }
         }
 
         stage('Integration Tests') {
@@ -252,66 +257,10 @@ pipeline {
             }
         }
 
-        stage('Deploy UAT') {
-            when {
-                allOf { branch 'uat'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
-            }
-            steps { executeServerlessDeploy('uat') }
-        }
-
-        stage('Deploy Prod') {
-            when {
-                allOf { branch 'main'; expression { params.AWS_ACCESS_KEY_ID?.trim() != '' } }
-            }
-            steps { executeServerlessDeploy('prod') }
-        }
     }
     post {
         always {
             deleteDir();
-        }
-    }
-}
-
-// Despliega con Serverless Framework y publica la config (apiUrl del stage)
-// en el mismo bucket de config que ya usa MS-SEGURIDAD-BOMBEROS
-// (bomberos-config-<stage>), bajo una key separada (bandeja-config.json)
-// para no pisar el config.json de seguridad. Así el frontend sigue
-// leyendo datos actualizados sin importar cuándo rotaron las credenciales
-// de AWS Academy -- mismo mecanismo que ya resolvió el PM para seguridad.
-def executeServerlessDeploy(String targetStage) {
-    docker.image('node:20').inside {
-        withEnv([
-            "AWS_ACCESS_KEY_ID=${params.AWS_ACCESS_KEY_ID}",
-            "AWS_SECRET_ACCESS_KEY=${params.AWS_SECRET_ACCESS_KEY}",
-            "AWS_SESSION_TOKEN=${params.AWS_SESSION_TOKEN}",
-            "AWS_DEFAULT_REGION=us-east-1",
-            "DB_HOST=${params.DB_HOST}",
-            "DB_PORT=5432",
-            "DB_NAME=${params.DB_NAME}",
-            "DB_USER=${params.DB_USER}",
-            "DB_PASSWORD=${params.DB_PASSWORD}",
-            "DRIVE_FOLDER_ID=${params.DRIVE_FOLDER_ID}",
-            "NPM_CONFIG_PREFIX=${env.WORKSPACE}/.npm-global"
-        ]) {
-            sh """
-                apt-get update -qq && apt-get install -y -qq python3 python3-pip > /dev/null
-                pip install --break-system-packages --quiet boto3
-            """
-            // Falla rápido y con un mensaje claro si falta MS-SEGURIDAD-BOMBEROS
-            // en este stage, o crea el bucket de config si todavía no existe.
-            sh "python3 scripts/verificar_dependencias.py --stage ${targetStage}"
-            // El authorizer valida contra el User Pool de seguridad, que puede
-            // vivir en otra cuenta: el ARN se arma con el config.json publico del
-            // stage (ver scripts/resolver_user_pool.py).
-            sh """
-                export USER_POOL_ARN=\$(python3 scripts/resolver_user_pool.py --stage ${targetStage})
-                echo "User Pool del authorizer: \$USER_POOL_ARN"
-                npm install -g serverless@3
-                npm install
-                ./.npm-global/bin/serverless deploy --stage ${targetStage} --verbose
-            """
-            sh "python3 scripts/publicar_config.py --stage ${targetStage}"
         }
     }
 }

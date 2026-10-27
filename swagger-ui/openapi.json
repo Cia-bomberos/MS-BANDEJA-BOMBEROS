@@ -279,6 +279,9 @@
                       "Maquinas",
                       "Sanidad"
                     ]
+                  },
+                  "nota": {
+                    "type": "string"
                   }
                 }
               }
@@ -371,6 +374,56 @@
         }
       }
     },
+    "/documentos/{id}/en-proceso": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DocumentoId"
+        }
+      ],
+      "patch": {
+        "operationId": "marcarEnProceso",
+        "summary": "Marca el documento como En proceso (desde Pendiente)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nota": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "En proceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mensaje"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutenticado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflicto"
+          }
+        }
+      }
+    },
     "/documentos/{id}/atender": {
       "parameters": [
         {
@@ -380,9 +433,74 @@
       "patch": {
         "operationId": "marcarAtendido",
         "summary": "Marca el documento como Atendido",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nota": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Atendido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mensaje"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutenticado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflicto"
+          }
+        }
+      }
+    },
+    "/documentos/{id}/archivar": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DocumentoId"
+        }
+      ],
+      "patch": {
+        "operationId": "archivarDocumento",
+        "summary": "Archiva el documento (desde Atendido)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nota": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Archivado",
             "content": {
               "application/json": {
                 "schema": {
@@ -577,6 +695,102 @@
           }
         }
       }
+    },
+    "/configuracion/drive": {
+      "get": {
+        "operationId": "obtenerConfigDrive",
+        "summary": "Carpeta de Google Drive configurada para el respaldo (solo Jefe de Administración)",
+        "responses": {
+          "200": {
+            "description": "Estado de la configuración",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDrive"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutenticado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          }
+        }
+      },
+      "put": {
+        "operationId": "guardarConfigDrive",
+        "summary": "Registra o actualiza el enlace de la carpeta de Drive (solo Jefe de Administración)",
+        "description": "Comprueba contra Drive que la carpeta existe y que la cuenta de respaldo puede escribir en ella. Los archivos ya archivados no se mueven.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enlace"
+                ],
+                "properties": {
+                  "enlace": {
+                    "type": "string",
+                    "example": "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Estado de la configuración",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDrive"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Enlace ausente o no es de una carpeta de Drive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutenticado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "422": {
+            "description": "La carpeta no existe, no está compartida con la cuenta de respaldo o no es editable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "No se pudo autenticar o consultar Google Drive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -746,6 +960,48 @@
                 }
               }
             }
+          }
+        }
+      },
+      "ConfigDrive": {
+        "type": "object",
+        "properties": {
+          "configurado": {
+            "type": "boolean"
+          },
+          "origen": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "configuracion",
+              "variable_de_entorno",
+              null
+            ]
+          },
+          "carpeta_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "carpeta_nombre": {
+            "type": "string",
+            "nullable": true
+          },
+          "enlace": {
+            "type": "string",
+            "nullable": true
+          },
+          "actualizado_por": {
+            "type": "string",
+            "nullable": true
+          },
+          "actualizado_en": {
+            "type": "string",
+            "nullable": true
+          },
+          "cuenta_respaldo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Correo de la cuenta de Google con la que compartir la carpeta como Editor"
           }
         }
       }
