@@ -16,5 +16,5 @@ COPY modulo_documentos ./modulo_documentos
 COPY migrations ./migrations
 
 # Sin privilegios de root dentro de la imagen
-RUN useradd --no-create-home --uid 10001 app
+RUN adduser -D -H -u 10001 app
 USER app
