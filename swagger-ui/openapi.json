@@ -279,6 +279,9 @@
                       "Maquinas",
                       "Sanidad"
                     ]
+                  },
+                  "nota": {
+                    "type": "string"
                   }
                 }
               }
@@ -371,6 +374,56 @@
         }
       }
     },
+    "/documentos/{id}/en-proceso": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DocumentoId"
+        }
+      ],
+      "patch": {
+        "operationId": "marcarEnProceso",
+        "summary": "Marca el documento como En proceso (desde Pendiente)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nota": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "En proceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mensaje"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutenticado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflicto"
+          }
+        }
+      }
+    },
     "/documentos/{id}/atender": {
       "parameters": [
         {
@@ -380,9 +433,74 @@
       "patch": {
         "operationId": "marcarAtendido",
         "summary": "Marca el documento como Atendido",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nota": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Atendido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mensaje"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutenticado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflicto"
+          }
+        }
+      }
+    },
+    "/documentos/{id}/archivar": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DocumentoId"
+        }
+      ],
+      "patch": {
+        "operationId": "archivarDocumento",
+        "summary": "Archiva el documento (desde Atendido)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nota": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Archivado",
             "content": {
               "application/json": {
                 "schema": {
