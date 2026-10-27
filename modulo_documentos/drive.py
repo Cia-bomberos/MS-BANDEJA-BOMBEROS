@@ -236,7 +236,7 @@ def cuenta_respaldo(token: str):
                             headers={"Authorization": f"Bearer {token}"}, timeout=TIMEOUT_SEGUNDOS)
         resp.raise_for_status()
         return resp.json().get("user", {}).get("emailAddress")
-    except Exception:  # noqa: BLE001 -- dato informativo, nunca debe romper la pantalla
+    except Exception:  # noqa
         return None
 
 

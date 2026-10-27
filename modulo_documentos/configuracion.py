@@ -55,7 +55,7 @@ def _token_o_none():
     try:
         return drive._token()
     except Exception as e:  # noqa: BLE001
-        logger.error("Drive: no se pudo obtener el token de acceso: %s", e)
+        logger.exception("Drive: no se pudo obtener el token de acceso: %s", e)
         return None
 
 
