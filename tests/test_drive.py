@@ -163,7 +163,8 @@ class TestNombresRuta:
 
     def test_sin_fecha_usa_ahora(self):
         anio, mes = drive.nombres_ruta(None)
-        assert anio.isdigit() and mes[:2].isdigit()
+        assert anio.isdigit()
+        assert mes[:2].isdigit()
 
 
 class TestCarpetas:

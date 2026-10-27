@@ -141,7 +141,8 @@ def test_configurar_carpeta_la_guarda_y_el_archivador_la_usa(bd, registrar, llam
     # Solo el Jefe de Administración puede
     assert llamar(configuracion.guardar_config_drive, "Jefatura", body={"enlace": enlace})[0] == 403
     estado, cuerpo = llamar(configuracion.guardar_config_drive, "Jefe_Administracion", body={"enlace": enlace})
-    assert estado == 200 and cuerpo["carpeta_id"] == ID_CARPETA
+    assert estado == 200
+    assert cuerpo["carpeta_id"] == ID_CARPETA
     estado, cuerpo = llamar(configuracion.obtener_config_drive, "Jefe_Administracion")
     assert (estado, cuerpo["carpeta_nombre"], cuerpo["origen"]) == (200, "SOFTWARE_BOMBEROS", "configuracion")
 

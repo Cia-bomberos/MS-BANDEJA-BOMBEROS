@@ -90,7 +90,9 @@ class TestObtener:
         monkeypatch.delenv("DRIVE_FOLDER_ID", raising=False)
         conn_mock[1].fetchone.return_value = None
         body = json.loads(configuracion.obtener_config_drive(_event(), None)["body"])
-        assert body["configurado"] is False and body["carpeta_id"] is None and body["enlace"] is None
+        assert body["configurado"] is False
+        assert body["carpeta_id"] is None
+        assert body["enlace"] is None
 
     def test_sin_credenciales_de_google_igual_responde(self, conn_mock, monkeypatch):
         def _falla(s3=None):
@@ -99,7 +101,8 @@ class TestObtener:
         monkeypatch.setattr(drive, "_token", _falla)
         conn_mock[1].fetchone.return_value = FILA
         r = configuracion.obtener_config_drive(_event(), None)
-        assert r["statusCode"] == 200 and json.loads(r["body"])["cuenta_respaldo"] is None
+        assert r["statusCode"] == 200
+        assert json.loads(r["body"])["cuenta_respaldo"] is None
 
     def test_cierra_la_conexion(self, conn_mock, drive_ok):
         conn_mock[1].fetchone.return_value = FILA
@@ -147,7 +150,8 @@ class TestGuardar:
         monkeypatch.setattr(drive, "cuenta_respaldo", lambda token: None)
         monkeypatch.setattr(drive, "verificar_carpeta", lambda *a: (_ for _ in ()).throw(drive.ErrorCarpeta("no existe")))
         r = configuracion.guardar_config_drive(_event(body={"enlace": ENLACE}), None)
-        assert r["statusCode"] == 422 and json.loads(r["body"])["error"] == "no existe"
+        assert r["statusCode"] == 422
+        assert json.loads(r["body"])["error"] == "no existe"
 
     def test_credenciales_vencidas_502(self, conn_mock, monkeypatch):
         def _falla(s3=None):
