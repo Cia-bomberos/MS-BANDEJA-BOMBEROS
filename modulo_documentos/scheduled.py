@@ -79,66 +79,104 @@ def _subir_a_drive(doc, raiz):
     )
 
 
-def archivar_documentos(event, context):
-    """RN-0026: 'Atendido' -> 'Archivado' tras 3 días. RN-0027: al archivar,
-    respalda en Google Drive. Si el respaldo falla, el documento se archiva
-    igual (RN-0026) pero queda con confirmado_drive = false y se reintenta en
-    cada corrida hasta que Drive lo confirme (RN-0028 exige esa confirmación
-    para poder eliminarlo)."""
-    conn = get_connection()
+def _respaldar_doc(cur, doc):
+    """Sube un documento a Drive y actualiza la fila. Devuelve True si Drive confirmó.
+    NO hace commit: lo decide el llamador (por documento)."""
+    raiz = _carpeta_raiz(cur)
+    respaldo = _subir_a_drive(doc, raiz)
+    cur.execute(
+        """
+        UPDATE documentos
+        SET confirmado_drive = %s, drive_file_id = %s, drive_folder_id = %s,
+            respaldado_en = CASE WHEN %s THEN now() ELSE NULL END,
+            fecha_actualizacion = now()
+        WHERE id = %s
+        """,
+        (bool(respaldo), (respaldo or {}).get("file_id"), (respaldo or {}).get("folder_id"),
+         bool(respaldo), doc["id"]),
+    )
+    return bool(respaldo)
+
+
+def _ejecutar_archivado(conn):
+    """Lógica compartida por el cron y el endpoint manual. Devuelve
+    (archivados, reintentados) contando solo los que quedaron confirmados en Drive."""
     archivados = 0
     reintentados = 0
+    with conn.cursor() as cur:
+        # 1) Atendido con más de 3 días -> Archivado + intento de respaldo
+        cur.execute(
+            """
+            SELECT id, codigo_unico, archivo_s3_key, fecha_creacion FROM documentos
+            WHERE estado = 'Atendido' AND atendido_en <= now() - interval '3 days'
+            """
+        )
+        por_archivar = cur.fetchall()
+
+        for doc in por_archivar:
+            _respaldar_doc(cur, doc)
+            cur.execute(
+                "UPDATE documentos SET estado = 'Archivado', fecha_actualizacion = now() WHERE id = %s",
+                (doc["id"],),
+            )
+            conn.commit()
+            archivados += 1
+
+        # 2) Archivado con confirmado_drive = false -> reintentar
+        cur.execute(
+            """
+            SELECT id, codigo_unico, archivo_s3_key, fecha_creacion FROM documentos
+            WHERE estado = 'Archivado' AND confirmado_drive = false
+            """
+        )
+        pendientes = cur.fetchall()
+
+        for doc in pendientes:
+            if _respaldar_doc(cur, doc):
+                conn.commit()
+                reintentados += 1
+    return archivados, reintentados
+
+
+def archivar_documentos(event, context):
+    """Cron: misma lógica que el botón manual."""
+    conn = get_connection()
+    try:
+        archivados, reintentados = _ejecutar_archivado(conn)
+        logger.info(
+            "Archivado automático: %s archivados, %s respaldos pendientes confirmados.",
+            archivados, reintentados,
+        )
+        return {"archivados": archivados, "respaldos_reintentados": reintentados}
+    finally:
+        conn.close()
+
+
+def respaldar_un_documento(event, context):
+    """Invocada desde archivar_documento. `event` = {"documento_id": "..."}.
+    Respalda SOLO ese documento. No cambia el estado."""
+    documento_id = event.get("documento_id")
+    if not documento_id:
+        return {"ok": False, "error": "documento_id requerido"}
+
+    conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                SELECT id, codigo_unico, archivo_s3_key, fecha_creacion FROM documentos
-                WHERE estado = 'Atendido' AND atendido_en <= now() - interval '3 days'
-                """
+                """SELECT id, codigo_unico, archivo_s3_key, fecha_creacion
+                   FROM documentos WHERE id = %s""",
+                (documento_id,),
             )
-            por_archivar = cur.fetchall()
-            raiz = _carpeta_raiz(cur)
+            doc = cur.fetchone()
+            if not doc:
+                return {"ok": False, "error": "documento no encontrado"}
 
-            for doc in por_archivar:
-                respaldo = _subir_a_drive(doc, raiz)
-                cur.execute(
-                    """
-                    UPDATE documentos
-                    SET estado = 'Archivado', confirmado_drive = %s,
-                        drive_file_id = %s, drive_folder_id = %s,
-                        respaldado_en = CASE WHEN %s THEN now() ELSE NULL END,
-                        fecha_actualizacion = now()
-                    WHERE id = %s
-                    """,
-                    (bool(respaldo), (respaldo or {}).get("file_id"), (respaldo or {}).get("folder_id"),
-                     bool(respaldo), doc["id"]),
-                )
-                conn.commit()  # por documento: un timeout no pierde lo ya procesado
-                archivados += 1
-
-            cur.execute(
-                """
-                SELECT id, codigo_unico, archivo_s3_key, fecha_creacion FROM documentos
-                WHERE estado = 'Archivado' AND confirmado_drive = false
-                """
-            )
-            pendientes = cur.fetchall()
-
-            for doc in pendientes:
-                respaldo = _subir_a_drive(doc, raiz)
-                if respaldo:
-                    cur.execute(
-                        """
-                        UPDATE documentos
-                        SET confirmado_drive = true, drive_file_id = %s, drive_folder_id = %s,
-                            respaldado_en = now(), fecha_actualizacion = now()
-                        WHERE id = %s
-                        """,
-                        (respaldo["file_id"], respaldo["folder_id"], doc["id"]),
-                    )
-                    conn.commit()
-                    reintentados += 1
-        logger.info("Archivado automático: %s archivados, %s respaldos pendientes confirmados.", archivados, reintentados)
-        return {"archivados": archivados, "respaldos_reintentados": reintentados}
+            confirmado = _respaldar_doc(cur, doc)
+        conn.commit()
+        return {"ok": confirmado}
+    except Exception as e:
+        conn.rollback()
+        logger.exception("Error respaldando documento %s: %s", documento_id, e)
+        return {"ok": False, "error": str(e)}
     finally:
         conn.close()

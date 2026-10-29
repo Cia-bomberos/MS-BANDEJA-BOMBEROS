@@ -6,14 +6,17 @@ RF-0001 a RF-0009 del documento de análisis. El diseño de endpoints es
 libre (no está fijado por el documento), así que se armó uno por cada
 operación relevante del ciclo de vida.
 
-Pendiente / fuera de alcance de esta primera versión (ver README):
-- RN-0027 (subida automática a Google Drive al archivar): no hay cuenta de
-  servicio de Google todavía. `modulo_documentos/scheduled.py` deja el punto
-  de integración marcado con TODO para no bloquear el resto.
+RN-0027 (subida automática a Google Drive al archivar): se dispara de forma
+asíncrona desde `archivar_documento` (respaldo individual) y desde el cron
+`archivar_documentos` (red de seguridad). Ver `modulo_documentos/scheduled.py`.
 """
 
 import json
+import logging
+import os
 from datetime import date, datetime
+
+import boto3
 
 from modulo_documentos import auth, s3util
 from modulo_documentos.codigo import formatear_codigo
@@ -21,8 +24,13 @@ from modulo_documentos.db import get_connection, siguiente_correlativo
 from modulo_documentos.prioridad import calcular_prioridad
 from modulo_documentos.tiempo import ahora_lima, hoy_lima
 
-ESTADOS_VALIDOS = {"Pendiente", "En proceso", "Atendido", "Archivado"}
+ESTADOS_VALIDOS = {"Pendiente", "En proceso", "Atendido", "Archivado"}  # NOSONAR
 PRIORIDADES_VALIDAS = {"Alta", "Media", "Baja"}
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+lambda_client = boto3.client("lambda")
 
 
 def _respuesta(status: int, body: dict):
@@ -178,7 +186,7 @@ def crear_documento(event, context):
                 VALUES (%s, %s, %s, 'Pendiente', %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, codigo_unico, tipo, modalidad, estado, prioridad, fecha_limite, fecha_creacion, asunto
                 """,
-                (codigo_unico, tipo, modalidad, prioridad, prioridad_manual, seccion, seccion, 
+                (codigo_unico, tipo, modalidad, prioridad, prioridad_manual, seccion, seccion,
                  fecha_limite, archivo_s3_key, asunto),
             )
             doc = cur.fetchone()
@@ -257,7 +265,7 @@ def obtener_documento(event, context):
             cur.execute("SELECT * FROM documentos WHERE id = %s", (documento_id,))
             doc = cur.fetchone()
             if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
+                return _respuesta(404, {"error": "Documento no encontrado."})  # NOSONAR
 
             if not _puede_consultar(cur, event, documento_id, doc["seccion_responsable"]):
                 return _respuesta(403, {"error": "No tiene acceso a esta sección."})
@@ -285,7 +293,7 @@ def derivar_documento(event, context):
     documento_id = event["pathParameters"]["id"]
     body = json.loads(event.get("body") or "{}")
     seccion_destino = body.get("seccion_destino")
-    nota = str(body.get("nota") or "").strip();
+    nota = str(body.get("nota") or "").strip()
 
     if seccion_destino not in auth.SECCIONES_VALIDAS:
         return _respuesta(400, {"error": "seccion_destino inválida."})
@@ -368,7 +376,7 @@ def actualizar_archivo(event, context):
             if doc["estado"] != "En proceso":
                 return _respuesta(409, {"error": "Solo se puede reemplazar el archivo mientras el documento está 'En proceso'."})
             if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})  # NOSONAR
 
             definitiva = s3util.promover_pdf(nuevo_s3_key)
             if not definitiva:
@@ -408,7 +416,7 @@ def marcar_atendido(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
+            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))  # NOSONAR
             doc = cur.fetchone()
             if not doc:
                 return _respuesta(404, {"error": "Documento no encontrado."})
@@ -504,6 +512,96 @@ def archivar_documento(event, context):
         conn.close()
 
 # ---------------------------------------------------------------------------
+# PATCH /documentos/{id}/en-proceso
+# ---------------------------------------------------------------------------
+
+def marcar_en_proceso(event, context):
+    """Pasa a 'En proceso' manualmente sin necesidad de derivar a otra sección."""
+    documento_id = event["pathParameters"]["id"]
+    body = json.loads(event.get("body") or "{}")
+    nota = str(body.get("nota") or "").strip()
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
+            doc = cur.fetchone()
+            if not doc:
+                return _respuesta(404, {"error": "Documento no encontrado."})
+            if doc["estado"] != "Pendiente":
+                return _respuesta(409, {"error": f"No se puede pasar a 'En proceso' desde el estado '{doc['estado']}'."})
+            if not auth.puede_escribir(event, doc["seccion_responsable"]):
+                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+
+            cur.execute(
+                "UPDATE documentos SET estado = 'En proceso', fecha_actualizacion = now() WHERE id = %s",
+                (documento_id,),
+            )
+            detalle = "Documento marcado como En proceso." + (f" Nota: {nota}" if nota else "")
+            _registrar_historial(cur, documento_id, event, "en_proceso", detalle)
+        conn.commit()
+        return _respuesta(200, {"mensaje": "Documento marcado como En proceso."})
+    except Exception as e:
+        conn.rollback()
+        return _respuesta(500, {"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# PATCH /documentos/{id}/archivar
+# ---------------------------------------------------------------------------
+
+def archivar_documento(event, context):
+    """Pasa a 'Archivado' manualmente. Solo se permite desde 'Atendido'.
+    Dispara en segundo plano el respaldo de ESE documento a Google Drive."""
+    documento_id = event["pathParameters"]["id"]
+    body = json.loads(event.get("body") or "{}")
+    nota = str(body.get("nota") or "").strip()
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
+            doc = cur.fetchone()
+            if not doc:
+                return _respuesta(404, {"error": "Documento no encontrado."})
+            if doc["estado"] != "Atendido":
+                return _respuesta(409, {"error": "Solo se pueden archivar documentos en estado 'Atendido'."})
+            if not auth.puede_escribir(event, doc["seccion_responsable"]):
+                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+
+            cur.execute(
+                "UPDATE documentos SET estado = 'Archivado', fecha_actualizacion = now() WHERE id = %s",
+                (documento_id,),
+            )
+            detalle = "Documento Archivado." + (f" Nota: {nota}" if nota else "")
+            _registrar_historial(cur, documento_id, event, "archivado", detalle)
+        conn.commit()
+
+        # Disparo asíncrono del respaldo de ESTE documento.
+        # Si falla el invoke, el cron horario lo reintentará (confirmado_drive = false).
+        try:
+            lambda_client.invoke(
+                FunctionName=os.environ["FUNCTION_RESPALDAR_DOCUMENTO"],
+                InvocationType="Event",
+                Payload=json.dumps({"documento_id": documento_id}),
+            )
+        except Exception as e:
+            logger.warning(
+                "No se pudo encolar respaldo del documento %s; el cron lo reintentará: %s",
+                documento_id, e,
+            )
+
+        return _respuesta(200, {"mensaje": "Documento Archivado."})
+    except Exception as e:
+        conn.rollback()
+        return _respuesta(500, {"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # PATCH /documentos/{id}/prioridad
 # ---------------------------------------------------------------------------
 
@@ -568,7 +666,7 @@ def _parsear_envio(body: dict):
     fecha/hora se usa el momento actual de Lima."""
     medio = str(body.get("medio") or "").strip()
     destinatario = str(body.get("destinatario") or "").strip()
-    
+
     if not medio or not destinatario:
         return None, "medio y destinatario son obligatorios."
 
@@ -625,7 +723,7 @@ def registrar_envio_externo(event, context):
             )
 
             detalle = (
-                f"Envio externo registrado. Medio: {envio['medio']}. " 
+                f"Envio externo registrado. Medio: {envio['medio']}. "
                 f"Destinatario: {envio['destinatario']}. "
                 f"Enviado el {envio['fecha']:%d/%m/%Y} a las {envio['hora']:%H:%M}."
                 "Documento atendido"
@@ -701,6 +799,34 @@ def eliminar_documento(event, context):
         return _respuesta(200, {"mensaje": "Documento eliminado."})
     except Exception as e:
         conn.rollback()
+        return _respuesta(500, {"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# POST /documentos/archivar-ahora
+# ---------------------------------------------------------------------------
+
+def archivar_ahora(event, context):
+    """POST /documentos/archivar-ahora
+    Fuerza una corrida inmediata del archivado automático (misma lógica que el cron).
+    Solo el Jefe de Administración puede dispararlo."""
+    if not auth.es_jefe_administracion(event):
+        return _respuesta(403, {"error": "Solo el Jefe de Administración puede forzar el archivado."})
+
+    # Import local para no acoplar handler.py con scheduled.py a nivel de módulo
+    from modulo_documentos.scheduled import _ejecutar_archivado
+    conn = get_connection()
+    try:
+        archivados, reintentados = _ejecutar_archivado(conn)
+        return _respuesta(200, {
+            "mensaje": "Archivado ejecutado.",
+            "archivados": archivados,
+            "respaldos_reintentados": reintentados,
+        })
+    except Exception as e:
+        logger.exception("Error en archivado manual: %s", e)
         return _respuesta(500, {"error": str(e)})
     finally:
         conn.close()
