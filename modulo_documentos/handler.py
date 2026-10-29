@@ -77,12 +77,24 @@ def _cargar_y_autorizar(cur, event, documento_id, estados_permitidos, mensaje_es
     (None, respuesta_http) con el error listo para retornar."""
     doc = _cargar_documento(cur, documento_id)
     if not doc:
-        return None, _respuesta(404, {"error": "Documento no encontrado."}) #NOSONAR
+        return None, _respuesta(404, {"error": "Documento no encontrado."})  # NOSONAR
     if doc["estado"] not in estados_permitidos:
         return None, _respuesta(409, {"error": mensaje_estado})
     if not auth.puede_escribir(event, doc["seccion_responsable"]):
         return None, _respuesta(403, {"error": "No tiene permiso sobre este documento."})
     return doc, None
+
+
+def _cambiar_estado(cur, documento_id, event, nuevo_estado, accion, nota="", extra_set=""):
+    """UPDATE de estado + registro en historial. `extra_set` añade columnas
+    adicionales al SET (p. ej. ', atendido_en = now()')."""
+    set_clause = f"estado = %s, fecha_actualizacion = now(){extra_set}"
+    cur.execute(
+        f"UPDATE documentos SET {set_clause} WHERE id = %s",
+        (nuevo_estado, documento_id),
+    )
+    detalle = f"Documento marcado como {nuevo_estado}." + (f" Nota: {nota}" if nota else "")
+    _registrar_historial(cur, documento_id, event, accion, detalle)
 
 
 def _seccion_participo(cur, documento_id, seccion: str) -> bool:
@@ -434,13 +446,8 @@ def marcar_atendido(event, context):
             )
             if error:
                 return error
-
-            cur.execute(
-                "UPDATE documentos SET estado = 'Atendido', atendido_en = now(), fecha_actualizacion = now() WHERE id = %s",
-                (documento_id,),
-            )
-            detalle = "Documento marcado como Atendido." + (f" Nota: {nota}" if nota else "")
-            _registrar_historial(cur, documento_id, event, "atendido", detalle)
+            _cambiar_estado(cur, documento_id, event, "Atendido", "atendido", nota,
+                            extra_set=", atendido_en = now()")
         conn.commit()
         return _respuesta(200, {"mensaje": "Documento marcado como Atendido."})
     except Exception as e:
@@ -448,6 +455,7 @@ def marcar_atendido(event, context):
         return _respuesta(500, {"error": str(e)})
     finally:
         conn.close()
+
 
 
 # ---------------------------------------------------------------------------
@@ -470,13 +478,7 @@ def marcar_en_proceso(event, context):
             )
             if error:
                 return error
-
-            cur.execute(
-                "UPDATE documentos SET estado = 'En proceso', fecha_actualizacion = now() WHERE id = %s",
-                (documento_id,),
-            )
-            detalle = "Documento marcado como En proceso." + (f" Nota: {nota}" if nota else "")
-            _registrar_historial(cur, documento_id, event, "en_proceso", detalle)
+            _cambiar_estado(cur, documento_id, event, "En proceso", "en_proceso", nota)
         conn.commit()
         return _respuesta(200, {"mensaje": "Documento marcado como En proceso."})
     except Exception as e:
@@ -507,103 +509,7 @@ def archivar_documento(event, context):
             )
             if error:
                 return error
-
-            cur.execute(
-                "UPDATE documentos SET estado = 'Archivado', fecha_actualizacion = now() WHERE id = %s",
-                (documento_id,),
-            )
-            detalle = "Documento Archivado." + (f" Nota: {nota}" if nota else "")
-            _registrar_historial(cur, documento_id, event, "archivado", detalle)
-        conn.commit()
-
-        # Disparo asíncrono del respaldo de ESTE documento.
-        # Si falla el invoke, el cron horario lo reintentará (confirmado_drive = false).
-        try:
-            lambda_client.invoke(
-                FunctionName=os.environ["FUNCTION_RESPALDAR_DOCUMENTO"],
-                InvocationType="Event",
-                Payload=json.dumps({"documento_id": documento_id}),
-            )
-        except Exception as e:
-            logger.warning(
-                "No se pudo encolar respaldo del documento %s; el cron lo reintentará: %s",
-                documento_id, e,
-            )
-
-        return _respuesta(200, {"mensaje": "Documento Archivado."})
-    except Exception as e:
-        conn.rollback()
-        return _respuesta(500, {"error": str(e)})
-    finally:
-        conn.close()
-
-
-# ---------------------------------------------------------------------------
-# PATCH /documentos/{id}/en-proceso
-# ---------------------------------------------------------------------------
-
-def marcar_en_proceso(event, context):
-    """Pasa a 'En proceso' manualmente sin necesidad de derivar a otra sección."""
-    documento_id = event["pathParameters"]["id"]
-    body = json.loads(event.get("body") or "{}")
-    nota = str(body.get("nota") or "").strip()
-
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] != "Pendiente":
-                return _respuesta(409, {"error": f"No se puede pasar a 'En proceso' desde el estado '{doc['estado']}'."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
-
-            cur.execute(
-                "UPDATE documentos SET estado = 'En proceso', fecha_actualizacion = now() WHERE id = %s",
-                (documento_id,),
-            )
-            detalle = "Documento marcado como En proceso." + (f" Nota: {nota}" if nota else "")
-            _registrar_historial(cur, documento_id, event, "en_proceso", detalle)
-        conn.commit()
-        return _respuesta(200, {"mensaje": "Documento marcado como En proceso."})
-    except Exception as e:
-        conn.rollback()
-        return _respuesta(500, {"error": str(e)})
-    finally:
-        conn.close()
-
-
-# ---------------------------------------------------------------------------
-# PATCH /documentos/{id}/archivar
-# ---------------------------------------------------------------------------
-
-def archivar_documento(event, context):
-    """Pasa a 'Archivado' manualmente. Solo se permite desde 'Atendido'.
-    Dispara en segundo plano el respaldo de ESE documento a Google Drive."""
-    documento_id = event["pathParameters"]["id"]
-    body = json.loads(event.get("body") or "{}")
-    nota = str(body.get("nota") or "").strip()
-
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] != "Atendido":
-                return _respuesta(409, {"error": "Solo se pueden archivar documentos en estado 'Atendido'."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
-
-            cur.execute(
-                "UPDATE documentos SET estado = 'Archivado', fecha_actualizacion = now() WHERE id = %s",
-                (documento_id,),
-            )
-            detalle = "Documento Archivado." + (f" Nota: {nota}" if nota else "")
-            _registrar_historial(cur, documento_id, event, "archivado", detalle)
+            _cambiar_estado(cur, documento_id, event, "Archivado", "archivado", nota)
         conn.commit()
 
         # Disparo asíncrono del respaldo de ESTE documento.

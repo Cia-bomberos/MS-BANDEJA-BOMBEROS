@@ -59,12 +59,20 @@ class TestMarcarEnProceso:
 
     def test_exito(self, conn_mock):
         conn, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Pendiente"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": "Pendiente",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         body = {"nota": "iniciando revisión"}
         resp = handler.marcar_en_proceso(_event("Jefe_Maquinas", ID, body=body), None)
         assert resp["statusCode"] == 200
-        upd = [c for c in cur.execute.call_args_list if "estado = 'En proceso'" in c.args[0]]
+
+        upd = [c for c in cur.execute.call_args_list if "UPDATE documentos SET estado" in c.args[0]]
         assert len(upd) == 1
+        assert "estado = %s" in upd[0].args[0]
+        assert upd[0].args[1][0] == "En proceso"
         conn.commit.assert_called_once()
 
 
