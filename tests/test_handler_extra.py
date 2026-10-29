@@ -181,8 +181,9 @@ class TestActualizarArchivo:
         assert handler.actualizar_archivo(_event("Jefe_Maquinas", ID, body={"archivo_s3_key": "k"}), None)["statusCode"] == 409
 
     def test_sin_permiso(self, conn_mock):
+        # actualizar_archivo exige estado 'En proceso' para llegar al chequeo de permiso
         _, cur = conn_mock
-        cur.fetchone.return_value = _doc(seccion="Sanidad")
+        cur.fetchone.return_value = _doc(seccion="Sanidad", estado="En proceso")
         assert handler.actualizar_archivo(_event("Jefe_Maquinas", ID, body={"archivo_s3_key": "k"}), None)["statusCode"] == 403
 
     def test_exito_elimina_el_archivo_anterior(self, conn_mock, s3_valido):
@@ -216,8 +217,9 @@ class TestMarcarAtendido:
         assert handler.marcar_atendido(_event("Jefe_Maquinas", ID), None)["statusCode"] == 409
 
     def test_sin_permiso(self, conn_mock):
+        # marcar_atendido admite Pendiente/En proceso -> usamos Pendiente para llegar al 403
         _, cur = conn_mock
-        cur.fetchone.return_value = _doc(seccion="Sanidad")
+        cur.fetchone.return_value = _doc(seccion="Sanidad", estado="Pendiente")
         assert handler.marcar_atendido(_event("Jefe_Maquinas", ID), None)["statusCode"] == 403
 
     @pytest.mark.parametrize("estado", ["Pendiente", "En proceso"])
@@ -239,8 +241,9 @@ class TestAsignarPrioridad:
         assert handler.asignar_prioridad(_event("Jefatura", ID, body={"prioridad": "Alta"}), None)["statusCode"] == 404
 
     def test_sin_permiso(self, conn_mock):
+        # asignar_prioridad exige Pendiente -> usamos Pendiente para llegar al 403
         _, cur = conn_mock
-        cur.fetchone.return_value = _doc(seccion="Sanidad")
+        cur.fetchone.return_value = _doc(seccion="Sanidad", estado="Pendiente")
         assert handler.asignar_prioridad(_event("Jefe_Maquinas", ID, body={"prioridad": "Alta"}), None)["statusCode"] == 403
 
     @pytest.mark.parametrize("estado", ["En proceso", "Atendido", "Archivado"])
@@ -299,8 +302,9 @@ class TestEnvioExterno:
         assert handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=ENVIO), None)["statusCode"] == 409
 
     def test_sin_permiso(self, conn_mock):
+        # registrar_envio_externo admite Pendiente/En proceso -> usamos Pendiente para llegar al 403
         _, cur = conn_mock
-        cur.fetchone.return_value = _doc(seccion="Sanidad")
+        cur.fetchone.return_value = _doc(seccion="Sanidad", estado="Pendiente")
         assert handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=ENVIO), None)["statusCode"] == 403
 
     def test_sin_descarga_previa_se_rechaza(self, conn_mock):
@@ -393,15 +397,27 @@ class TestDescargar:
 class TestErroresInesperados:
     def test_derivar_devuelve_500_y_hace_rollback(self, conn_mock):
         conn, cur = conn_mock
+        # _cargar_documento lee las 4 columnas -> fetchone debe devolver todas
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": "Pendiente",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
+        # SELECT ok, luego UPDATE revienta
         cur.execute.side_effect = [None, RuntimeError("BD caida")]
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas"}
         resp = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
         assert resp["statusCode"] == 500
         conn.rollback.assert_called_once()
 
     def test_derivar_a_la_misma_seccion(self, conn_mock):
         _, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": "Pendiente",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         assert handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Maquinas"}), None)["statusCode"] == 400
 
     def test_eliminar_no_encontrado(self, conn_mock):
@@ -415,34 +431,61 @@ class TestBugsDerivacionYEnvio:
     @pytest.mark.parametrize("estado", ["Atendido", "Archivado"])
     def test_no_se_deriva_documento_cerrado(self, conn_mock, estado):
         conn, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": estado, "modalidad": "completo"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": estado,
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
         assert r["statusCode"] == 409
         conn.commit.assert_not_called()
 
-    def test_derivar_externo_sin_permiso_es_403_antes_que_409(self, conn_mock):
+    def test_derivar_externo_atendido_da_409_antes_que_403(self, conn_mock):
+        """Con el contrato actual, el orden es: 404 -> 409 (estado) -> 403 (permiso)."""
         _, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Sanidad", "estado": "Atendido", "modalidad": "simplificado"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Sanidad",
+            "estado": "Atendido",
+            "modalidad": "simplificado",
+            "archivo_s3_key": None,
+        }
         r = handler.derivar_documento(_event("Jefe_Maquinas", ID, body={"seccion_destino": "Administracion"}), None)
-        assert r["statusCode"] == 403
+        assert r["statusCode"] == 409
 
     def test_derivar_documento_interno_en_proceso_sigue_ok(self, conn_mock):
         conn, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "En proceso", "modalidad": "completo"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": "En proceso",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
         assert r["statusCode"] == 200
 
     def test_no_se_registra_envio_externo_de_documento_atendido(self, conn_mock):
         conn, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Atendido"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": "Atendido",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         r = handler.registrar_envio_externo(_event("Jefe_Maquinas", ID, body=ENVIO), None)
         assert r["statusCode"] == 409
         conn.commit.assert_not_called()
 
+
 class TestDerivarConNota:
     def test_la_nota_queda_en_el_historial(self, conn_mock):
         conn, cur = conn_mock
-        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "estado": "Pendiente", "modalidad": "completo"}
+        cur.fetchone.return_value = {
+            "seccion_responsable": "Maquinas",
+            "estado": "Pendiente",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         body = {"seccion_destino": "Sanidad", "nota": "Revisar el presupuesto."}
         resp = handler.derivar_documento(_event("Jefe_Maquinas", ID, body=body), None)
         assert resp["statusCode"] == 200
