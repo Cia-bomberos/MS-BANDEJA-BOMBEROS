@@ -535,6 +535,96 @@ def archivar_documento(event, context):
 
 
 # ---------------------------------------------------------------------------
+# PATCH /documentos/{id}/en-proceso
+# ---------------------------------------------------------------------------
+
+def marcar_en_proceso(event, context):
+    """Pasa a 'En proceso' manualmente sin necesidad de derivar a otra sección."""
+    documento_id = event["pathParameters"]["id"]
+    body = json.loads(event.get("body") or "{}")
+    nota = str(body.get("nota") or "").strip()
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
+            doc = cur.fetchone()
+            if not doc:
+                return _respuesta(404, {"error": "Documento no encontrado."})
+            if doc["estado"] != "Pendiente":
+                return _respuesta(409, {"error": f"No se puede pasar a 'En proceso' desde el estado '{doc['estado']}'."})
+            if not auth.puede_escribir(event, doc["seccion_responsable"]):
+                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+
+            cur.execute(
+                "UPDATE documentos SET estado = 'En proceso', fecha_actualizacion = now() WHERE id = %s",
+                (documento_id,),
+            )
+            detalle = "Documento marcado como En proceso." + (f" Nota: {nota}" if nota else "")
+            _registrar_historial(cur, documento_id, event, "en_proceso", detalle)
+        conn.commit()
+        return _respuesta(200, {"mensaje": "Documento marcado como En proceso."})
+    except Exception as e:
+        conn.rollback()
+        return _respuesta(500, {"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# PATCH /documentos/{id}/archivar
+# ---------------------------------------------------------------------------
+
+def archivar_documento(event, context):
+    """Pasa a 'Archivado' manualmente. Solo se permite desde 'Atendido'.
+    Dispara en segundo plano el respaldo de ESE documento a Google Drive."""
+    documento_id = event["pathParameters"]["id"]
+    body = json.loads(event.get("body") or "{}")
+    nota = str(body.get("nota") or "").strip()
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
+            doc = cur.fetchone()
+            if not doc:
+                return _respuesta(404, {"error": "Documento no encontrado."})
+            if doc["estado"] != "Atendido":
+                return _respuesta(409, {"error": "Solo se pueden archivar documentos en estado 'Atendido'."})
+            if not auth.puede_escribir(event, doc["seccion_responsable"]):
+                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+
+            cur.execute(
+                "UPDATE documentos SET estado = 'Archivado', fecha_actualizacion = now() WHERE id = %s",
+                (documento_id,),
+            )
+            detalle = "Documento Archivado." + (f" Nota: {nota}" if nota else "")
+            _registrar_historial(cur, documento_id, event, "archivado", detalle)
+        conn.commit()
+
+        # Disparo asíncrono del respaldo de ESTE documento.
+        # Si falla el invoke, el cron horario lo reintentará (confirmado_drive = false).
+        try:
+            lambda_client.invoke(
+                FunctionName=os.environ["FUNCTION_RESPALDAR_DOCUMENTO"],
+                InvocationType="Event",
+                Payload=json.dumps({"documento_id": documento_id}),
+            )
+        except Exception as e:
+            logger.warning(
+                "No se pudo encolar respaldo del documento %s; el cron lo reintentará: %s",
+                documento_id, e,
+            )
+
+        return _respuesta(200, {"mensaje": "Documento Archivado."})
+    except Exception as e:
+        conn.rollback()
+        return _respuesta(500, {"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # PATCH /documentos/{id}/prioridad
 # ---------------------------------------------------------------------------
 
