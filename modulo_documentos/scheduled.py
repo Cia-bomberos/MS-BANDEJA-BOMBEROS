@@ -5,7 +5,6 @@ No tienen event de API Gateway: se disparan por cron, no por HTTP.
 
 import logging
 import os
-
 from modulo_documentos import drive
 from modulo_documentos.db import get_connection
 from modulo_documentos.prioridad import dias_restantes, reclasificar
