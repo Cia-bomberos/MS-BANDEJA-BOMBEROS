@@ -37,6 +37,7 @@ provider:
     DOCUMENTS_BUCKET: !Ref DocumentsBucket
     DOCUMENTS_BUCKET_OWNER: ${aws:accountId}
     DRIVE_FOLDER_ID: ${env:DRIVE_FOLDER_ID, ''}
+    FUNCTION_RESPALDAR_DOCUMENTO: ${self:service}-${sls:stage}-respaldarDocumento
 
 package:
   patterns:
@@ -135,6 +136,8 @@ functions:
 
   archivarDocumento:
     handler: modulo_documentos/handler.archivar_documento
+    timeout: 30
+    memorySize: 512
     events:
       - http:
           path: documentos/{id}/archivar
@@ -178,6 +181,17 @@ functions:
           cors: true
           authorizer: *cognitoAuthorizer
 
+  archivarAhora:
+    handler: modulo_documentos/handler.archivar_ahora
+    timeout: 120
+    memorySize: 512
+    events:
+      - http:
+          path: documentos/archivar-ahora
+          method: post
+          cors: true
+          authorizer: *cognitoAuthorizer
+
   obtenerConfigDrive:
     handler: modulo_documentos/configuracion.obtener_config_drive
     timeout: 30
@@ -209,6 +223,12 @@ functions:
     memorySize: 512
     events:
       - schedule: rate(1 hour)
+
+  respaldarDocumento:
+    handler: modulo_documentos/scheduled.respaldar_un_documento
+    timeout: 30
+    memorySize: 256
+    # Sin events: se invoca desde archivar_documento y (opcionalmente) desde archivarAhora
 
 resources:
   Resources:
