@@ -241,18 +241,26 @@ class TestDerivarDocumento:
 
     def test_otra_seccion_no_puede_derivar(self, conn_mock):
         conn, cursor = conn_mock
-        cursor.fetchone.return_value = {"seccion_responsable": "Sanidad"}
+        cursor.fetchone.return_value = {
+            "seccion_responsable": "Sanidad",
+            "estado": "Pendiente",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         event = _event(grupo="Jefe_Maquinas", path_params={"id": "doc-1"}, body={"seccion_destino": "Administracion"})
         resp = handler.derivar_documento(event, None)
         assert resp["statusCode"] == 403
 
     def test_derivacion_exitosa(self, conn_mock):
         conn, cursor = conn_mock
-        cursor.fetchone.return_value = {"seccion_responsable": "Sanidad"}
+        cursor.fetchone.return_value = {
+            "seccion_responsable": "Sanidad",
+            "estado": "Pendiente",
+            "modalidad": "completo",
+            "archivo_s3_key": None,
+        }
         event = _event(grupo="Jefe_Sanidad", path_params={"id": "doc-1"}, body={"seccion_destino": "Administracion"})
-
         resp = handler.derivar_documento(event, None)
-
         assert resp["statusCode"] == 200
         conn.commit.assert_called_once()
 

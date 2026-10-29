@@ -33,6 +33,10 @@ logger.setLevel(logging.INFO)
 lambda_client = boto3.client("lambda")
 
 
+# ---------------------------------------------------------------------------
+# Helpers transversales (evitan duplicación entre endpoints)
+# ---------------------------------------------------------------------------
+
 def _respuesta(status: int, body: dict):
     return {
         "statusCode": status,
@@ -58,10 +62,27 @@ def _registrar_historial(cur, documento_id, event, accion: str, detalle: str = "
     )
 
 
-def _obtener_seccion_doc(cur, documento_id) -> str | None:
-    cur.execute("SELECT seccion_responsable FROM documentos WHERE id = %s", (documento_id,))
-    row = cur.fetchone()
-    return row["seccion_responsable"] if row else None
+def _cargar_documento(cur, documento_id):
+    """Carga los campos comunes que necesitan los endpoints de mutación."""
+    cur.execute(
+        "SELECT seccion_responsable, estado, modalidad, archivo_s3_key FROM documentos WHERE id = %s",
+        (documento_id,),
+    )
+    return cur.fetchone()
+
+
+def _cargar_y_autorizar(cur, event, documento_id, estados_permitidos, mensaje_estado):
+    """Devuelve (doc, None) si el documento existe, está en un estado permitido y
+    el usuario puede escribir sobre su sección. Si algo falla, devuelve
+    (None, respuesta_http) con el error listo para retornar."""
+    doc = _cargar_documento(cur, documento_id)
+    if not doc:
+        return None, _respuesta(404, {"error": "Documento no encontrado."}) #NOSONAR
+    if doc["estado"] not in estados_permitidos:
+        return None, _respuesta(409, {"error": mensaje_estado})
+    if not auth.puede_escribir(event, doc["seccion_responsable"]):
+        return None, _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+    return doc, None
 
 
 def _seccion_participo(cur, documento_id, seccion: str) -> bool:
@@ -76,8 +97,7 @@ def _seccion_participo(cur, documento_id, seccion: str) -> bool:
 
 def _puede_consultar(cur, event, documento_id, seccion_doc: str) -> bool:
     """RN-0021 / CU-008: además de quien tiene acceso por su rol o sección, la
-    sección que registró o derivó el documento conserva su consulta (solo lectura)
-    para hacerle seguimiento aunque ya no sea la responsable."""
+    sección que registró o derivó el documento conserva su consulta (solo lectura)."""
     if auth.puede_leer(event, seccion_doc):
         return True
     seccion = auth.seccion_usuario(event)
@@ -303,21 +323,17 @@ def derivar_documento(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT seccion_responsable, estado, modalidad FROM documentos WHERE id = %s",
-                (documento_id,),
+            doc, error = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"Pendiente", "En proceso"},
+                mensaje_estado="No se puede derivar un documento en estado 'Atendido' o 'Archivado'.",
             )
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
+            if error:
+                return error
             seccion_actual = doc["seccion_responsable"]
-            if not auth.puede_escribir(event, seccion_actual):
-                return _respuesta(403, {"error": "No tiene permiso para derivar este documento."})
-            # Un documento ya atendido (o archivado) tiene la gestión cerrada.
-            if doc.get("estado") in ("Atendido", "Archivado"):
-                return _respuesta(409, {"error": f"No se puede derivar un documento en estado '{doc['estado']}'."})
             if seccion_destino == seccion_actual:
                 return _respuesta(400, {"error": "El documento ya está en esa sección."})
+
             if doc.get("modalidad") == "simplificado":
                 # Externo: cambia de sección pero sigue 'Pendiente'.
                 cur.execute(
@@ -366,17 +382,13 @@ def actualizar_archivo(event, context):
     definitiva = None
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT seccion_responsable, estado, archivo_s3_key FROM documentos WHERE id = %s",
-                (documento_id,),
+            doc, error = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"En proceso"},
+                mensaje_estado="Solo se puede reemplazar el archivo mientras el documento está 'En proceso'.",
             )
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] != "En proceso":
-                return _respuesta(409, {"error": "Solo se puede reemplazar el archivo mientras el documento está 'En proceso'."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})  # NOSONAR
+            if error:
+                return error
 
             definitiva = s3util.promover_pdf(nuevo_s3_key)
             if not definitiva:
@@ -409,21 +421,19 @@ def marcar_atendido(event, context):
     """RN-0008, RN-0011: pasa a 'Atendido' (desde 'Pendiente' -- simplificado --
     o desde 'En proceso' cuando la sección que lo revisó cierra la gestión)."""
     documento_id = event["pathParameters"]["id"]
-
     body = json.loads(event.get("body") or "{}")
     nota = str(body.get("nota") or "").strip()
 
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))  # NOSONAR
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] not in ("Pendiente", "En proceso"):
-                return _respuesta(409, {"error": f"No se puede marcar como Atendido desde el estado '{doc['estado']}'."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+            _, error = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"Pendiente", "En proceso"},
+                mensaje_estado="Solo se puede marcar como Atendido desde 'Pendiente' o 'En proceso'.",
+            )
+            if error:
+                return error
 
             cur.execute(
                 "UPDATE documentos SET estado = 'Atendido', atendido_en = now(), fecha_actualizacion = now() WHERE id = %s",
@@ -439,6 +449,7 @@ def marcar_atendido(event, context):
     finally:
         conn.close()
 
+
 # ---------------------------------------------------------------------------
 # PATCH /documentos/{id}/en-proceso
 # ---------------------------------------------------------------------------
@@ -452,14 +463,13 @@ def marcar_en_proceso(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] != "Pendiente":
-                return _respuesta(409, {"error": f"No se puede pasar a 'En proceso' desde el estado '{doc['estado']}'."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+            _, error = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"Pendiente"},
+                mensaje_estado="Solo se puede pasar a 'En proceso' desde 'Pendiente'.",
+            )
+            if error:
+                return error
 
             cur.execute(
                 "UPDATE documentos SET estado = 'En proceso', fecha_actualizacion = now() WHERE id = %s",
@@ -475,12 +485,14 @@ def marcar_en_proceso(event, context):
     finally:
         conn.close()
 
+
 # ---------------------------------------------------------------------------
 # PATCH /documentos/{id}/archivar
 # ---------------------------------------------------------------------------
 
 def archivar_documento(event, context):
-    """Pasa a 'Archivado' manualmente. Solo se permite desde 'Atendido'."""
+    """Pasa a 'Archivado' manualmente. Solo se permite desde 'Atendido'.
+    Dispara en segundo plano el respaldo de ESE documento a Google Drive."""
     documento_id = event["pathParameters"]["id"]
     body = json.loads(event.get("body") or "{}")
     nota = str(body.get("nota") or "").strip()
@@ -488,14 +500,13 @@ def archivar_documento(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] != "Atendido":
-                return _respuesta(409, {"error": "Solo se pueden archivar documentos en estado 'Atendido'."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
+            _, error = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"Atendido"},
+                mensaje_estado="Solo se pueden archivar documentos en estado 'Atendido'.",
+            )
+            if error:
+                return error
 
             cur.execute(
                 "UPDATE documentos SET estado = 'Archivado', fecha_actualizacion = now() WHERE id = %s",
@@ -504,12 +515,28 @@ def archivar_documento(event, context):
             detalle = "Documento Archivado." + (f" Nota: {nota}" if nota else "")
             _registrar_historial(cur, documento_id, event, "archivado", detalle)
         conn.commit()
+
+        # Disparo asíncrono del respaldo de ESTE documento.
+        # Si falla el invoke, el cron horario lo reintentará (confirmado_drive = false).
+        try:
+            lambda_client.invoke(
+                FunctionName=os.environ["FUNCTION_RESPALDAR_DOCUMENTO"],
+                InvocationType="Event",
+                Payload=json.dumps({"documento_id": documento_id}),
+            )
+        except Exception as e:
+            logger.warning(
+                "No se pudo encolar respaldo del documento %s; el cron lo reintentará: %s",
+                documento_id, e,
+            )
+
         return _respuesta(200, {"mensaje": "Documento Archivado."})
     except Exception as e:
         conn.rollback()
         return _respuesta(500, {"error": str(e)})
     finally:
         conn.close()
+
 
 # ---------------------------------------------------------------------------
 # PATCH /documentos/{id}/en-proceso
@@ -618,16 +645,13 @@ def asignar_prioridad(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
-            # RN-0023 / CU-006: la prioridad solo se asigna en 'Pendiente'; desde
-            # 'En proceso' queda congelada.
-            if doc["estado"] != "Pendiente":
-                return _respuesta(409, {"error": "La prioridad solo puede asignarse mientras el documento está Pendiente."})
+            _, error = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"Pendiente"},
+                mensaje_estado="La prioridad solo puede asignarse mientras el documento está Pendiente.",
+            )
+            if error:
+                return error
 
             campos, valores = [], []
             if prioridad is not None:
@@ -699,16 +723,13 @@ def registrar_envio_externo(event, context):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT seccion_responsable, estado FROM documentos WHERE id = %s", (documento_id,))
-            doc = cur.fetchone()
-            if not doc:
-                return _respuesta(404, {"error": "Documento no encontrado."})
-            if doc["estado"] == "Archivado":
-                return _respuesta(409, {"error": "El documento ya está Archivado."})
-            if not auth.puede_escribir(event, doc["seccion_responsable"]):
-                return _respuesta(403, {"error": "No tiene permiso sobre este documento."})
-            if doc["estado"] == "Atendido":
-                return _respuesta(409, {"error": "El documento ya está Atendido; no se puede registrar otro envío externo."})
+            _, err = _cargar_y_autorizar(
+                cur, event, documento_id,
+                estados_permitidos={"Pendiente", "En proceso"},
+                mensaje_estado="El documento ya está 'Atendido' o 'Archivado'; no admite envío externo.",
+            )
+            if err:
+                return err
 
             cur.execute(
                 "SELECT 1 FROM historial_acciones WHERE documento_id = %s AND accion = 'descarga' AND usuario_sub = %s LIMIT 1",
@@ -728,10 +749,7 @@ def registrar_envio_externo(event, context):
                 f"Enviado el {envio['fecha']:%d/%m/%Y} a las {envio['hora']:%H:%M}."
                 "Documento atendido"
             )
-
-            _registrar_historial(
-                cur, documento_id, event, "envio_externo", detalle
-            )
+            _registrar_historial(cur, documento_id, event, "envio_externo", detalle)
         conn.commit()
         return _respuesta(200, {"mensaje": "Envío externo registrado. Documento marcado como Atendido."})
     except Exception as e:
