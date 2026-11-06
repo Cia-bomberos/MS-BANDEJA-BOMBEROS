@@ -35,6 +35,7 @@ def _doc(id_, estado="Atendido"):
         "codigo_unico": f"OF-{id_}",
         "archivo_s3_key": f"k-{id_}",
         "fecha_creacion": "2026-10-01",
+        "tipo": "Oficio",
         "estado": estado,
     }
 
@@ -224,3 +225,36 @@ class TestRespaldarUnDocumento:
         assert "boom" in r["error"]
         conn.rollback.assert_called_once()
         conn.commit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# El tipo del documento llega a Drive (carpeta <Año>/<Mes>/<Tipo>)
+# ---------------------------------------------------------------------------
+
+class TestSubirADrive:
+    def test_pasa_fecha_raiz_y_tipo_a_drive(self, monkeypatch):
+        visto = {}
+
+        def _respaldar(*args, **kwargs):
+            visto["args"], visto["kwargs"] = args, kwargs
+            return OK
+
+        monkeypatch.setattr(scheduled.drive, "respaldar", _respaldar)
+        assert scheduled._subir_a_drive(_doc("1"), "raiz") == OK
+        assert visto["kwargs"] == {"fecha": "2026-10-01", "raiz": "raiz", "tipo": "Oficio"}
+
+    def test_documento_externo_sin_tipo(self, monkeypatch):
+        visto = {}
+        monkeypatch.setattr(scheduled.drive, "respaldar", lambda *a, **k: visto.update(k) or OK)
+        doc = _doc("2")
+        doc["tipo"] = None
+        scheduled._subir_a_drive(doc, "raiz")
+        assert visto["tipo"] is None
+
+    def test_las_consultas_traen_el_tipo(self, conn_mock, monkeypatch):
+        _, cursor = conn_mock
+        cursor.fetchall.side_effect = [[], []]
+        monkeypatch.setattr(scheduled, "_subir_a_drive", lambda *a: OK)
+        scheduled.archivar_documentos({}, None)
+        selects = [c.args[0] for c in cursor.execute.call_args_list if "archivo_s3_key" in c.args[0]]
+        assert selects and all("tipo" in sql for sql in selects)

@@ -71,12 +71,13 @@ def _carpeta_raiz(cur):
 
 
 def _subir_a_drive(doc, raiz):
-    """RN-0027 / RNF-0009: respalda el PDF en Google Drive (`<raíz>/<Año>/<Mes>/`, según la
-    fecha de registro). Devuelve {"file_id", "folder_id"} solo si Drive lo confirmó; si
+    """RN-0027 / RNF-0009: respalda el PDF en Google Drive (`<raíz>/<Año>/<Mes>/<Tipo>/`, según la
+    fecha de registro y el tipo). Devuelve {"file_id", "folder_id"} solo si Drive lo confirmó; si
     falla o no está configurado devuelve None y el documento se reintenta en la
     siguiente corrida (ver `archivar_documentos`)."""
     return drive.respaldar(
-        doc["id"], doc["codigo_unico"], doc["archivo_s3_key"], fecha=doc["fecha_creacion"], raiz=raiz
+        doc["id"], doc["codigo_unico"], doc["archivo_s3_key"], fecha=doc["fecha_creacion"], raiz=raiz,
+        tipo=doc.get("tipo"),
     )
 
 
@@ -108,7 +109,7 @@ def _ejecutar_archivado(conn):
         # 1) Atendido con más de 3 días -> Archivado + intento de respaldo
         cur.execute(
             """
-            SELECT id, codigo_unico, archivo_s3_key, fecha_creacion FROM documentos
+            SELECT id, codigo_unico, archivo_s3_key, fecha_creacion, tipo FROM documentos
             WHERE estado = 'Atendido' AND atendido_en <= now() - interval '3 days'
             """
         )
@@ -126,7 +127,7 @@ def _ejecutar_archivado(conn):
         # 2) Archivado con confirmado_drive = false -> reintentar
         cur.execute(
             """
-            SELECT id, codigo_unico, archivo_s3_key, fecha_creacion FROM documentos
+            SELECT id, codigo_unico, archivo_s3_key, fecha_creacion, tipo FROM documentos
             WHERE estado = 'Archivado' AND confirmado_drive = false
             """
         )
@@ -164,7 +165,7 @@ def respaldar_un_documento(event, context):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, codigo_unico, archivo_s3_key, fecha_creacion
+                """SELECT id, codigo_unico, archivo_s3_key, fecha_creacion, tipo
                    FROM documentos WHERE id = %s""",
                 (documento_id,),
             )

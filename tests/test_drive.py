@@ -114,12 +114,12 @@ class TestRespaldar:
 
     def test_devuelve_ids_solo_cuando_drive_confirma(self, monkeypatch):
         monkeypatch.setattr(drive, "_token", lambda s3=None: "tok")
-        monkeypatch.setattr(drive, "carpeta_destino", lambda fecha, raiz, token: "mes-1")
+        monkeypatch.setattr(drive, "carpeta_destino", lambda fecha, raiz, token, tipo=None: "mes-1")
         monkeypatch.setattr(drive, "subir_pdf", lambda nombre, contenido, token, carpeta=None: "drive-1")
         r = drive.respaldar("1", "COD", "documentos/a.pdf", s3=self._s3())
         assert r == {"file_id": "drive-1", "folder_id": "mes-1"}
 
-    def test_sube_a_la_carpeta_de_anio_y_mes_bajo_la_raiz_indicada(self, monkeypatch):
+    def test_sube_a_la_carpeta_de_anio_mes_y_tipo_bajo_la_raiz_indicada(self, monkeypatch):
         visto = {}
         monkeypatch.setattr(drive, "_token", lambda s3=None: "tok")
         monkeypatch.setattr(drive, "asegurar_carpeta", lambda nombre, padre, token: f"{padre}/{nombre}")
@@ -130,9 +130,20 @@ class TestRespaldar:
 
         monkeypatch.setattr(drive, "subir_pdf", _sube)
         fecha = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
-        r = drive.respaldar("1", "COD", "documentos/a.pdf", s3=self._s3(), fecha=fecha, raiz="RAIZ")
-        assert visto["carpeta"] == "RAIZ/2026/10 - Octubre"
-        assert r["folder_id"] == "RAIZ/2026/10 - Octubre"
+        r = drive.respaldar("1", "COD", "documentos/a.pdf", s3=self._s3(), fecha=fecha, raiz="RAIZ",
+                            tipo="NOTA INFORMATIVA")
+        assert visto["carpeta"] == "RAIZ/2026/10 - Octubre/Nota Informativa"
+        assert r["folder_id"] == "RAIZ/2026/10 - Octubre/Nota Informativa"
+
+    def test_documento_externo_va_a_la_carpeta_externos(self, monkeypatch):
+        visto = {}
+        monkeypatch.setattr(drive, "_token", lambda s3=None: "tok")
+        monkeypatch.setattr(drive, "asegurar_carpeta", lambda nombre, padre, token: f"{padre}/{nombre}")
+        monkeypatch.setattr(drive, "subir_pdf",
+                            lambda nombre, contenido, token, carpeta=None: visto.setdefault("carpeta", carpeta) and "f-1")
+        fecha = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+        drive.respaldar("1", "COD", "documentos/a.pdf", s3=self._s3(), fecha=fecha, raiz="RAIZ", tipo=None)
+        assert visto["carpeta"] == "RAIZ/2026/10 - Octubre/Externos"
 
     def test_none_y_sin_lanzar_si_drive_falla(self, monkeypatch):
         monkeypatch.setattr(drive, "_token", lambda s3=None: "tok")
@@ -167,6 +178,29 @@ class TestNombresRuta:
         assert mes[:2].isdigit()
 
 
+class TestNombreCarpetaTipo:
+    @pytest.mark.parametrize("tipo,esperado", [
+        ("Oficio", "Oficio"),
+        ("OFICIO", "Oficio"),
+        ("NOTA INFORMATIVA", "Nota Informativa"),
+        ("  nota   informativa ", "Nota Informativa"),
+        ("Informe", "Informe"),
+        ("Memorando", "Memorando"),
+        ("Carta", "Carta"),
+        ("Solicitud", "Solicitud"),
+        ("Acta", "Acta"),
+    ])
+    def test_normaliza_los_tipos_oficiales(self, tipo, esperado):
+        assert drive.nombre_carpeta_tipo(tipo) == esperado
+
+    @pytest.mark.parametrize("tipo", [None, "", "   "])
+    def test_sin_tipo_es_documento_externo(self, tipo):
+        assert drive.nombre_carpeta_tipo(tipo) == "Externos"
+
+    def test_no_deja_barras_en_el_nombre(self):
+        assert "/" not in drive.nombre_carpeta_tipo("a/b") and "\\" not in drive.nombre_carpeta_tipo("a\\b")
+
+
 class TestCarpetas:
     def test_reutiliza_la_carpeta_si_ya_existe(self, monkeypatch):
         monkeypatch.setattr(drive.requests, "get", lambda *a, **k: _resp({"files": [{"id": "ya-esta"}]}))
@@ -185,7 +219,7 @@ class TestCarpetas:
         assert drive.asegurar_carpeta("2026", "raiz", "tok") == "nueva"
         assert visto["json"] == {"name": "2026", "mimeType": drive.MIME_CARPETA, "parents": ["raiz"]}
 
-    def test_carpeta_destino_encadena_anio_y_mes(self, monkeypatch):
+    def test_carpeta_destino_encadena_anio_mes_y_tipo(self, monkeypatch):
         llamadas = []
 
         def _asegurar(nombre, padre, token):
@@ -194,8 +228,8 @@ class TestCarpetas:
 
         monkeypatch.setattr(drive, "asegurar_carpeta", _asegurar)
         fecha = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
-        assert drive.carpeta_destino(fecha, "raiz", "tok") == "id-10 - Octubre"
-        assert llamadas == [("2026", "raiz"), ("10 - Octubre", "id-2026")]
+        assert drive.carpeta_destino(fecha, "raiz", "tok", "Oficio") == "id-Oficio"
+        assert llamadas == [("2026", "raiz"), ("10 - Octubre", "id-2026"), ("Oficio", "id-10 - Octubre")]
 
     def test_el_nombre_con_comilla_se_escapa_en_la_consulta(self, monkeypatch):
         visto = {}

@@ -18,8 +18,10 @@ entorno porque Lambda limita todas las variables a 4KB.
 
 Carpeta raíz: la fija el Jefe de Administración desde el front (tabla `configuracion`,
 clave `drive`); DRIVE_FOLDER_ID es solo el valor de respaldo por defecto. Dentro de la raíz
-cada PDF va a `<Año>/<MM - Mes>/` según la fecha de REGISTRO del documento (hora de Lima),
-así un reintento siempre cae en la misma carpeta.
+cada PDF va a `<Año>/<MM - Mes>/<Tipo>/` según la fecha de REGISTRO del documento (hora de
+Lima) y su tipo (Oficio, Nota Informativa, Informe, Memorando, Carta, Solicitud, Acta; los
+documentos externos, que no tienen tipo, van a `Externos`), así un reintento siempre cae en
+la misma carpeta.
 
 Si no hay carpeta (ni configurada ni en DRIVE_FOLDER_ID), `configurado()` es False y el job
 de archivado no confirma nada (el documento queda pendiente de respaldo).
@@ -46,6 +48,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 API_ABOUT = "https://www.googleapis.com/drive/v3/about"
 CREDENCIALES_KEY_DEFECTO = "config/google-oauth.json"
 MIME_CARPETA = "application/vnd.google-apps.folder"
+CARPETA_EXTERNOS = "Externos"  # documentos externos (modalidad simplificada): no tienen tipo
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
@@ -142,6 +145,15 @@ def nombres_ruta(fecha) -> tuple[str, str]:
     return str(fecha.year), f"{fecha.month:02d} - {MESES[fecha.month - 1]}"
 
 
+def nombre_carpeta_tipo(tipo) -> str:
+    """Nombre de la carpeta del tipo de documento: 'NOTA INFORMATIVA' -> 'Nota Informativa'.
+    Sin tipo (documento externo) -> 'Externos'."""
+    limpio = re.sub(r"\s+", " ", str(tipo or "")).strip()
+    for ch in '/\\':
+        limpio = limpio.replace(ch, "-")
+    return limpio.title() if limpio else CARPETA_EXTERNOS
+
+
 def _buscar_carpeta(nombre: str, padre: str, token: str):
     q = (f"name = '{_q(nombre)}' and '{padre}' in parents and mimeType = '{MIME_CARPETA}' "
          "and trashed = false")
@@ -173,10 +185,11 @@ def asegurar_carpeta(nombre: str, padre: str, token: str) -> str:
     return resp.json()["id"]
 
 
-def carpeta_destino(fecha, raiz: str, token: str) -> str:
-    """Año/Mes bajo la carpeta raíz (se crean la primera vez que hacen falta)."""
+def carpeta_destino(fecha, raiz: str, token: str, tipo=None) -> str:
+    """Año/Mes/Tipo bajo la carpeta raíz (se crean la primera vez que hacen falta)."""
     anio, mes = nombres_ruta(fecha)
-    return asegurar_carpeta(mes, asegurar_carpeta(anio, raiz, token), token)
+    carpeta_mes = asegurar_carpeta(mes, asegurar_carpeta(anio, raiz, token), token)
+    return asegurar_carpeta(nombre_carpeta_tipo(tipo), carpeta_mes, token)
 
 
 # --- Configuración del enlace (la edita el Jefe de Administración desde el front) ---
@@ -240,8 +253,9 @@ def cuenta_respaldo(token: str):
         return None
 
 
-def respaldar(documento_id, codigo_unico, archivo_s3_key, s3=None, fecha=None, raiz=None):
-    """Copia el PDF de S3 a Drive, en `<raíz>/<Año>/<Mes>/` según `fecha` (la de registro).
+def respaldar(documento_id, codigo_unico, archivo_s3_key, s3=None, fecha=None, raiz=None, tipo=None):
+    """Copia el PDF de S3 a Drive, en `<raíz>/<Año>/<Mes>/<Tipo>/` según `fecha` (la de registro)
+    y `tipo` (None = documento externo -> carpeta `Externos`).
     Devuelve {"file_id", "folder_id"} SOLO si Drive confirmó el archivo; None si no.
     Cualquier fallo (red, permisos, credenciales) devuelve None sin lanzar."""
     raiz = (raiz or os.environ.get("DRIVE_FOLDER_ID", "")).strip()
@@ -252,7 +266,7 @@ def respaldar(documento_id, codigo_unico, archivo_s3_key, s3=None, fecha=None, r
         s3 = s3 or boto3.client("s3")
         contenido = s3.get_object(Bucket=os.environ["DOCUMENTS_BUCKET"], Key=archivo_s3_key)["Body"].read()
         token = _token(s3)
-        destino = carpeta_destino(fecha, raiz, token)
+        destino = carpeta_destino(fecha, raiz, token, tipo)
         file_id = subir_pdf(nombre_archivo(codigo_unico, documento_id), contenido, token, destino)
         logger.info("Drive: documento %s respaldado (%s) en la carpeta %s.", documento_id, file_id, destino)
         return {"file_id": file_id, "folder_id": destino}

@@ -145,10 +145,14 @@ la condición de RN-0028 para poder eliminar un documento.
   `confirmado_drive = false`, y **cada corrida del job lo reintenta** hasta que Drive
   lo confirme. Un reintento no duplica archivos (se busca por nombre antes de subir).
 - Nombre en Drive: el código único (`OFICIO N° 001-2026-...pdf`) o el id del documento.
-- **Carpetas por año y mes.** Dentro de la carpeta raíz cada PDF va a `<Año>/<MM - Mes>/`
-  (p. ej. `2026/10 - Octubre/`), según la **fecha de registro** del documento (hora de Lima),
-  no la de archivado; así un reintento cae siempre en la misma carpeta. Las subcarpetas se
-  crean la primera vez que hacen falta. El respaldo sigue ocurriendo **al archivar** (RN-0027).
+- **Carpetas por año, mes y tipo.** Dentro de la carpeta raíz cada PDF va a
+  `<Año>/<MM - Mes>/<Tipo>/` (p. ej. `2026/10 - Octubre/Nota Informativa/`), según la
+  **fecha de registro** del documento (hora de Lima), no la de archivado; así un reintento
+  cae siempre en la misma carpeta. Los tipos oficiales son Oficio, Nota Informativa, Informe,
+  Memorando, Carta, Solicitud y Acta; el nombre se normaliza (`NOTA INFORMATIVA` ->
+  `Nota Informativa`). Los documentos **externos**, que no tienen tipo, van a `Externos`.
+  Las subcarpetas se crean la primera vez que hacen falta. El respaldo sigue ocurriendo
+  **al archivar** (RN-0027). Lo ya respaldado antes de este cambio no se mueve.
 - **Dónde quedó cada documento.** Al confirmarse se guardan `drive_file_id`,
   `drive_folder_id` y `respaldado_en` (migración `002_drive.sql`).
 
