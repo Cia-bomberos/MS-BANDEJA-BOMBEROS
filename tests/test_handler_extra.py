@@ -394,6 +394,46 @@ class TestDescargar:
 
 
 # ---------------------------------------------------------------------------
+class TestVistaPrevia:
+    @staticmethod
+    def _url(monkeypatch):
+        monkeypatch.setattr(handler.s3util, "generar_url_descarga",
+                            lambda key, expira_segundos=300, inline=False: f"https://s3/{key}?inline={inline}")
+
+    def test_no_encontrado(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchone.return_value = None
+        assert handler.vista_previa_documento(_event("Jefatura", ID), None)["statusCode"] == 404
+
+    def test_sin_archivo(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "archivo_s3_key": None}
+        assert handler.vista_previa_documento(_event("Jefatura", ID), None)["statusCode"] == 404
+
+    def test_sin_acceso(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchone.side_effect = [{"seccion_responsable": "Sanidad", "archivo_s3_key": "k"}, None]
+        assert handler.vista_previa_documento(_event("Jefe_Maquinas", ID), None)["statusCode"] == 403
+
+    def test_devuelve_url_en_linea_y_no_registra_descarga(self, conn_mock, monkeypatch):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "archivo_s3_key": "k"}
+        self._url(monkeypatch)
+        resp = handler.vista_previa_documento(_event("Jefe_Maquinas", ID), None)
+        assert resp["statusCode"] == 200
+        assert json.loads(resp["body"]) == {"url": "https://s3/k?inline=True"}
+        # RN-0027: ver no es descargar -> ni historial ni commit
+        assert not [c for c in cur.execute.call_args_list if "historial_acciones" in c.args[0] and "INSERT" in c.args[0]]
+        conn.commit.assert_not_called()
+
+    def test_la_seccion_de_origen_puede_verlo_en_solo_lectura(self, conn_mock, monkeypatch):
+        _, cur = conn_mock
+        cur.fetchone.side_effect = [{"seccion_responsable": "Sanidad", "archivo_s3_key": "k"}, {"?column?": 1}]
+        self._url(monkeypatch)
+        assert handler.vista_previa_documento(_event("Jefe_Maquinas", ID), None)["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
 class TestErroresInesperados:
     def test_derivar_devuelve_500_y_hace_rollback(self, conn_mock):
         conn, cur = conn_mock

@@ -694,6 +694,35 @@ def descargar_documento(event, context):
 
 
 # ---------------------------------------------------------------------------
+# GET /documentos/{id}/vista-previa
+# ---------------------------------------------------------------------------
+
+def vista_previa_documento(event, context):
+    """URL pre-firmada para mostrar el PDF dentro de la página de detalle.
+
+    Mismos permisos que /descargar (_puede_consultar, incluida la sección de
+    origen en solo lectura), pero NO registra la acción 'descarga': ver un
+    documento no habilita el envío externo (RN-0027) ni aparece como
+    "Documento descargado" en la trazabilidad."""
+    documento_id = event["pathParameters"]["id"]
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seccion_responsable, archivo_s3_key FROM documentos WHERE id = %s", (documento_id,))
+            doc = cur.fetchone()
+            if not doc or not doc["archivo_s3_key"]:
+                return _respuesta(404, {"error": "Documento no encontrado."})
+            if not _puede_consultar(cur, event, documento_id, doc["seccion_responsable"]):
+                return _respuesta(403, {"error": "No tiene acceso a esta sección."})
+        # Solo lectura: sin historial y sin commit.
+        url = s3util.generar_url_descarga(doc["archivo_s3_key"], inline=True)
+        return _respuesta(200, {"url": url})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # DELETE /documentos/{id}
 # ---------------------------------------------------------------------------
 

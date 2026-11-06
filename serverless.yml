@@ -172,6 +172,15 @@ functions:
           cors: true
           authorizer: *cognitoAuthorizer
 
+  vistaPreviaDocumento:
+    handler: modulo_documentos/handler.vista_previa_documento
+    events:
+      - http:
+          path: documentos/{id}/vista-previa
+          method: get
+          cors: true
+          authorizer: *cognitoAuthorizer
+
   eliminarDocumento:
     handler: modulo_documentos/handler.eliminar_documento
     events:

@@ -60,6 +60,16 @@ def test_url_de_subida_exige_content_type_pdf(s3_mock):
 def test_url_de_descarga(s3_mock):
     s3_mock.generate_presigned_url.return_value = "https://s3/get"
     assert s3util.generar_url_descarga("k") == "https://s3/get"
+    params = s3_mock.generate_presigned_url.call_args.kwargs["Params"]
+    assert params["ResponseContentDisposition"].startswith("attachment")
+
+
+def test_url_de_vista_previa_es_en_linea(s3_mock):
+    s3_mock.generate_presigned_url.return_value = "https://s3/get"
+    assert s3util.generar_url_descarga("k", inline=True) == "https://s3/get"
+    params = s3_mock.generate_presigned_url.call_args.kwargs["Params"]
+    assert params["ResponseContentDisposition"] == "inline"
+    assert params["ResponseContentType"] == "application/pdf"
 
 
 def test_validar_pdf_ok(s3_mock):

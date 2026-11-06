@@ -66,15 +66,20 @@ def generar_url_subida(expira_segundos: int = 300, tamano_bytes: int | None = No
     return {"uploadUrl": url, "archivo_s3_key": key, "expiraEn": expira_segundos}
 
 
-def generar_url_descarga(key: str, expira_segundos: int = 300) -> str:
-    """RN-0023: descargar el documento en su formato original."""
+def generar_url_descarga(key: str, expira_segundos: int = 300, inline: bool = False) -> str:
+    """RN-0023: descargar el documento en su formato original.
+
+    Con inline=True la URL hace que el navegador lo muestre (vista previa en el
+    visor del detalle) en vez de bajarlo."""
     nombre = os.path.basename(key) or "documento.pdf"
     return s3.generate_presigned_url(
         "get_object",
         Params={
             "Bucket": _bucket(), 
             "Key": key,
-            "ResponseContentDisposition": f'attachment; filename="{nombre}"',
+            "ResponseContentDisposition": (
+                "inline" if inline else f'attachment; filename="{nombre}"'
+            ),
             "ResponseContentType": "application/pdf"
             },
         ExpiresIn=expira_segundos,

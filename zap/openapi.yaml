@@ -273,6 +273,25 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
 
+  /documentos/{id}/vista-previa:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    get:
+      operationId: vistaPreviaDocumento
+      summary: URL pre-firmada para mostrar el PDF en el detalle (no cuenta como descarga)
+      responses:
+        "200":
+          description: URL temporal (5 min) para mostrar el PDF en linea
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
   /configuracion/drive:
     get:
       operationId: obtenerConfigDrive

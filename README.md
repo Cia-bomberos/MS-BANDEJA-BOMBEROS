@@ -96,6 +96,12 @@ desde su cuenta (Jenkins) y escribir ahí directamente.
   usuario); si no, 409. Body: `medio` y `destinatario` (obligatorios), `fecha_envio`
   (`YYYY-MM-DD`) y `hora_envio` (`HH:MM`) opcionales (por defecto, ahora en Lima). Todo
   queda en el detalle del historial.
+- **Vista previa (`GET /documentos/{id}/vista-previa`).** Devuelve `{ "url": ... }`,
+  una URL pre-firmada de 5 minutos con `Content-Disposition: inline`, para mostrar el
+  PDF dentro del detalle. Mismos permisos que `/descargar` (`_puede_consultar`, también
+  para la sección de origen en solo lectura), pero **no** registra la acción `descarga`:
+  ver un documento no habilita el envío externo (RN-0027) ni aparece en la trazabilidad.
+  404 si el documento no existe o no tiene archivo; 403 sin acceso.
 - **Archivos en S3 (RNF-0006/0007).** `POST /documentos/upload-url` acepta
   `tamano_bytes`; si se envía, el tamaño queda firmado en la URL y S3 rechaza otro
   Content-Length (máx. 20 MB). Si el PDF no es válido, el backend lo borra; al
@@ -120,6 +126,7 @@ superficie elegida:
 | PATCH | `/documentos/{id}/prioridad` | RN-0018 / RF-0005 |
 | POST | `/documentos/{id}/envio-externo` | RN-0021, 0022 / RF-0007 |
 | GET | `/documentos/{id}/descargar` | RN-0023 |
+| GET | `/documentos/{id}/vista-previa` | visor del detalle (no cuenta como descarga) |
 | DELETE | `/documentos/{id}` | RN-0028 / RF-0009 |
 
 Autorización (`modulo_documentos/auth.py`): Jefatura lee/escribe todas las
