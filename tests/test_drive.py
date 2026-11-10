@@ -198,7 +198,8 @@ class TestNombreCarpetaTipo:
         assert drive.nombre_carpeta_tipo(tipo) == "Externos"
 
     def test_no_deja_barras_en_el_nombre(self):
-        assert "/" not in drive.nombre_carpeta_tipo("a/b") and "\\" not in drive.nombre_carpeta_tipo("a\\b")
+        assert "/" not in drive.nombre_carpeta_tipo("a/b")
+        assert "\\" not in drive.nombre_carpeta_tipo("a\\b")
 
 
 class TestCarpetas:

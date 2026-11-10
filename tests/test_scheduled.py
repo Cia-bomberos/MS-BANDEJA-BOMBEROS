@@ -257,4 +257,5 @@ class TestSubirADrive:
         monkeypatch.setattr(scheduled, "_subir_a_drive", lambda *a: OK)
         scheduled.archivar_documentos({}, None)
         selects = [c.args[0] for c in cursor.execute.call_args_list if "archivo_s3_key" in c.args[0]]
-        assert selects and all("tipo" in sql for sql in selects)
+        assert selects
+        assert all("tipo" in sql for sql in selects)

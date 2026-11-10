@@ -84,7 +84,8 @@ def test_envio_externo_exige_descarga_y_guarda_los_datos(bd, registrar, llamar, 
 def test_vista_previa_no_cuenta_como_descarga(bd, registrar, llamar, consulta):
     doc = registrar()
     status, cuerpo = llamar(handler.vista_previa_documento, "Jefe_Maquinas", id=doc["id"])
-    assert status == 200 and cuerpo["url"]
+    assert status == 200 
+    assert cuerpo["url"]
     assert llamar(handler.vista_previa_documento, "Jefe_Sanidad", id=doc["id"])[0] == 403
 
     # ver el documento no habilita el envio externo (RN-0027) ni deja rastro de descarga
