@@ -60,8 +60,11 @@ def puede_leer(event, seccion_doc: str) -> bool:
 
 
 def puede_escribir(event, seccion_doc: str) -> bool:
-    """RF-0002: Jefatura escribe en cualquier sección; Jefe_Administracion solo en la suya."""
+    """RF-0002: Jefatura es de solo lectura en todos los documentos; Jefe_Administracion
+    escribe en cualquier sección; cada otro Jefe de Sección solo en la suya."""
     g = grupo(event)
     if g == JEFATURA:
+        return False
+    if g == "Jefe_Administracion":
         return True
     return seccion_usuario(event) == seccion_doc

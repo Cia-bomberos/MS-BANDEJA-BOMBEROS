@@ -34,12 +34,13 @@ class TestPuedeLeer:
 
 
 class TestPuedeEscribir:
-    def test_jefatura_escribe_en_cualquier_seccion(self):
-        assert auth.puede_escribir(_event("Jefatura"), "ServicioGeneral") is True
+    def test_jefatura_es_de_solo_lectura_en_todas_las_secciones(self):
+        for seccion in ("Administracion", "ServicioGeneral", "Maquinas", "Sanidad"):
+            assert auth.puede_escribir(_event("Jefatura"), seccion) is False
 
-    def test_jefe_administracion_solo_escribe_en_administracion(self):
-        assert auth.puede_escribir(_event("Jefe_Administracion"), "Administracion") is True
-        assert auth.puede_escribir(_event("Jefe_Administracion"), "Sanidad") is False
+    def test_jefe_administracion_escribe_en_todas_las_secciones(self):
+        for seccion in ("Administracion", "ServicioGeneral", "Maquinas", "Sanidad"):
+            assert auth.puede_escribir(_event("Jefe_Administracion"), seccion) is True
 
     def test_jefe_de_seccion_solo_escribe_en_la_propia(self):
         assert auth.puede_escribir(_event("Jefe_Sanidad"), "Sanidad") is True

@@ -129,10 +129,11 @@ superficie elegida:
 | GET | `/documentos/{id}/vista-previa` | visor del detalle (no cuenta como descarga) |
 | DELETE | `/documentos/{id}` | RN-0028 / RF-0009 |
 
-Autorización (`modulo_documentos/auth.py`): Jefatura lee/escribe todas las
-secciones; Jefe_Administracion lee todas pero solo escribe Administración (y
-es el único que puede eliminar documentos archivados); cada otro Jefe de
-Sección solo lee/escribe su propia sección.
+Autorización (`modulo_documentos/auth.py`): **Jefatura es de solo lectura** en todos los
+documentos de todas las secciones (el listado y el detalle devuelven `solo_lectura: true`
+y las operaciones de modificación responden 403); Jefe_Administracion lee y **edita los
+documentos de todas las secciones** (y es el único que puede eliminar documentos archivados y
+configurar Drive); cada otro Jefe de Sección solo lee/escribe su propia sección.
 
 ### Respaldo en Google Drive (RN-0027 / RF-0009)
 

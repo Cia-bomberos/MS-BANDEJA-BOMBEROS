@@ -233,12 +233,12 @@ class TestMarcarAtendido:
 # ---------------------------------------------------------------------------
 class TestAsignarPrioridad:
     def test_prioridad_invalida(self, conn_mock):
-        assert handler.asignar_prioridad(_event("Jefatura", ID, body={"prioridad": "Urgente"}), None)["statusCode"] == 400
+        assert handler.asignar_prioridad(_event("Jefe_Administracion", ID, body={"prioridad": "Urgente"}), None)["statusCode"] == 400
 
     def test_no_encontrado(self, conn_mock):
         _, cur = conn_mock
         cur.fetchone.return_value = None
-        assert handler.asignar_prioridad(_event("Jefatura", ID, body={"prioridad": "Alta"}), None)["statusCode"] == 404
+        assert handler.asignar_prioridad(_event("Jefe_Administracion", ID, body={"prioridad": "Alta"}), None)["statusCode"] == 404
 
     def test_sin_permiso(self, conn_mock):
         # asignar_prioridad exige Pendiente -> usamos Pendiente para llegar al 403
@@ -259,18 +259,18 @@ class TestAsignarPrioridad:
     def test_sin_campos(self, conn_mock):
         _, cur = conn_mock
         cur.fetchone.return_value = _doc(estado="Pendiente")
-        assert handler.asignar_prioridad(_event("Jefatura", ID, body={}), None)["statusCode"] == 400
+        assert handler.asignar_prioridad(_event("Jefe_Administracion", ID, body={}), None)["statusCode"] == 400
 
     def test_fecha_mal_formateada(self, conn_mock):
         _, cur = conn_mock
         cur.fetchone.return_value = _doc(estado="Pendiente")
-        assert handler.asignar_prioridad(_event("Jefatura", ID, body={"fecha_limite": "31/12/2026"}), None)["statusCode"] == 400
+        assert handler.asignar_prioridad(_event("Jefe_Administracion", ID, body={"fecha_limite": "31/12/2026"}), None)["statusCode"] == 400
 
     def test_exito_marca_prioridad_manual(self, conn_mock):
         conn, cur = conn_mock
         cur.fetchone.return_value = _doc(estado="Pendiente")
         body = {"prioridad": "Alta", "fecha_limite": "2026-12-31"}
-        assert handler.asignar_prioridad(_event("Jefatura", ID, body=body), None)["statusCode"] == 200
+        assert handler.asignar_prioridad(_event("Jefe_Administracion", ID, body=body), None)["statusCode"] == 200
         update = [c for c in cur.execute.call_args_list if "UPDATE documentos" in c.args[0]][0]
         assert "prioridad_manual = true" in update.args[0]
         conn.commit.assert_called_once()
@@ -434,6 +434,67 @@ class TestVistaPrevia:
 
 
 # ---------------------------------------------------------------------------
+class TestPermisosJefaturaYAdministracion:
+    """Jefatura es de solo lectura en todo; Jefe_Administracion edita todas las secciones."""
+
+    MUTACIONES = [
+        ("derivar_documento", "Pendiente", {"seccion_destino": "Sanidad"}),
+        ("marcar_en_proceso", "Pendiente", None),
+        ("marcar_atendido", "En proceso", None),
+        ("asignar_prioridad", "Pendiente", {"prioridad": "Alta"}),
+    ]
+
+    @pytest.mark.parametrize("nombre,estado,body", MUTACIONES)
+    def test_jefatura_no_puede_modificar_ningun_documento(self, conn_mock, nombre, estado, body):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = _doc(seccion="Maquinas", estado=estado)
+        resp = getattr(handler, nombre)(_event("Jefatura", ID, body=body), None)
+        assert resp["statusCode"] == 403
+        assert not [c for c in cur.execute.call_args_list if "UPDATE" in c.args[0]]
+        conn.commit.assert_not_called()
+
+    @pytest.mark.parametrize("nombre,estado,body", MUTACIONES)
+    def test_administracion_modifica_documentos_de_otras_secciones(self, conn_mock, nombre, estado, body):
+        conn, cur = conn_mock
+        cur.fetchone.return_value = _doc(seccion="Maquinas", estado=estado)
+        resp = getattr(handler, nombre)(_event("Jefe_Administracion", ID, body=body), None)
+        assert resp["statusCode"] == 200
+        conn.commit.assert_called_once()
+
+    def test_jefatura_ve_todo_marcado_como_solo_lectura(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchall.return_value = [
+            {"seccion_responsable": "Sanidad", "fecha_limite": hoy_lima() + timedelta(days=3)},
+            {"seccion_responsable": "Administracion", "fecha_limite": hoy_lima() + timedelta(days=3)},
+        ]
+        docs = json.loads(handler.listar_documentos(_event("Jefatura"), None)["body"])["documentos"]
+        assert [d["solo_lectura"] for d in docs] == [True, True]
+
+    def test_administracion_ve_todo_editable(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchall.return_value = [
+            {"seccion_responsable": "Sanidad", "fecha_limite": hoy_lima() + timedelta(days=3)},
+            {"seccion_responsable": "Administracion", "fecha_limite": hoy_lima() + timedelta(days=3)},
+        ]
+        docs = json.loads(handler.listar_documentos(_event("Jefe_Administracion"), None)["body"])["documentos"]
+        assert [d["solo_lectura"] for d in docs] == [False, False]
+
+    def test_el_detalle_de_jefatura_viene_en_solo_lectura(self, conn_mock):
+        _, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "fecha_limite": hoy_lima() + timedelta(days=3)}
+        cur.fetchall.return_value = []
+        body = json.loads(handler.obtener_documento(_event("Jefatura", ID), None)["body"])
+        assert body["solo_lectura"] is True
+
+    def test_jefatura_sigue_pudiendo_leer_descargar_y_ver(self, conn_mock, monkeypatch):
+        _, cur = conn_mock
+        cur.fetchone.return_value = {"seccion_responsable": "Maquinas", "archivo_s3_key": "k"}
+        monkeypatch.setattr(handler.s3util, "generar_url_descarga",
+                            lambda key, expira_segundos=300, inline=False: "https://s3/x")
+        assert handler.vista_previa_documento(_event("Jefatura", ID), None)["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
 class TestErroresInesperados:
     def test_derivar_devuelve_500_y_hace_rollback(self, conn_mock):
         conn, cur = conn_mock
@@ -446,7 +507,7 @@ class TestErroresInesperados:
         }
         # SELECT ok, luego UPDATE revienta
         cur.execute.side_effect = [None, RuntimeError("BD caida")]
-        resp = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
+        resp = handler.derivar_documento(_event("Jefe_Administracion", ID, body={"seccion_destino": "Sanidad"}), None)
         assert resp["statusCode"] == 500
         conn.rollback.assert_called_once()
 
@@ -458,7 +519,7 @@ class TestErroresInesperados:
             "modalidad": "completo",
             "archivo_s3_key": None,
         }
-        assert handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Maquinas"}), None)["statusCode"] == 400
+        assert handler.derivar_documento(_event("Jefe_Administracion", ID, body={"seccion_destino": "Maquinas"}), None)["statusCode"] == 400
 
     def test_eliminar_no_encontrado(self, conn_mock):
         _, cur = conn_mock
@@ -477,7 +538,7 @@ class TestBugsDerivacionYEnvio:
             "modalidad": "completo",
             "archivo_s3_key": None,
         }
-        r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
+        r = handler.derivar_documento(_event("Jefe_Administracion", ID, body={"seccion_destino": "Sanidad"}), None)
         assert r["statusCode"] == 409
         conn.commit.assert_not_called()
 
@@ -501,7 +562,7 @@ class TestBugsDerivacionYEnvio:
             "modalidad": "completo",
             "archivo_s3_key": None,
         }
-        r = handler.derivar_documento(_event("Jefatura", ID, body={"seccion_destino": "Sanidad"}), None)
+        r = handler.derivar_documento(_event("Jefe_Administracion", ID, body={"seccion_destino": "Sanidad"}), None)
         assert r["statusCode"] == 200
 
     def test_no_se_registra_envio_externo_de_documento_atendido(self, conn_mock):
