@@ -1,5 +1,5 @@
 meta {
-  name: Jefatura ve y puede gestionar el Oficio de Máquinas
+  name: Jefatura ve el Oficio de Máquinas en solo lectura
   type: http
   seq: 35
 }
@@ -22,8 +22,8 @@ tests {
     expect(res.body.estado).to.equal("Pendiente");
     expect(res.body.seccion_responsable).to.equal("Maquinas");
   });
-  test("esta cuenta puede gestionarlo", function () {
-    expect(res.body.solo_lectura).to.equal(false);
+  test("en solo lectura para esta cuenta", function () {
+    expect(res.body.solo_lectura).to.equal(true);
   });
   test("el asunto quedó guardado", function () {
     expect(res.body.asunto).to.equal("Oficio de Máquinas: requerimiento de equipos de protección personal");

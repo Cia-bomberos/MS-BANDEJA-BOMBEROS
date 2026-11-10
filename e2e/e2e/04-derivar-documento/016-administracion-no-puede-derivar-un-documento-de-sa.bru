@@ -1,5 +1,5 @@
 meta {
-  name: Administración no puede derivar un documento de Sanidad (403)
+  name: Jefatura no puede derivar un documento (403)
   type: http
   seq: 16
 }
@@ -11,11 +11,11 @@ patch {
 }
 
 headers {
-  Authorization: {{token_administracion}}
+  Authorization: {{token_jefatura}}
 }
 
 body:json {
-  {"seccion_destino": "Maquinas", "nota": "Intento."}
+  {"seccion_destino": "ServicioGeneral", "nota": "Intento."}
 }
 
 tests {

@@ -1,5 +1,5 @@
 meta {
-  name: Jefatura deriva d4_jefatura a Servicio General
+  name: Administración deriva d4_jefatura a Servicio General
   type: http
   seq: 17
 }
@@ -11,11 +11,11 @@ patch {
 }
 
 headers {
-  Authorization: {{token_jefatura}}
+  Authorization: {{token_administracion}}
 }
 
 body:json {
-  {"seccion_destino": "ServicioGeneral", "nota": "La Jefatura asigna el documento a Servicio General."}
+  {"seccion_destino": "ServicioGeneral", "nota": "La Administración asigna el documento a Servicio General."}
 }
 
 tests {

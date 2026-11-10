@@ -54,7 +54,7 @@ tests {
   test("el API acepta la sesión (200)", function () {
     expect(res.status).to.equal(200);
   });
-  test("Administración ve todo, pero solo gestiona lo suyo", function () {
-    expect(res.body.documentos.every(d => d.seccion_responsable === "Administracion" ? d.solo_lectura === false : d.solo_lectura === true)).to.equal(true);
+  test("Administración ve y gestiona todos los documentos", function () {
+    expect(res.body.documentos.every(d => d.solo_lectura === false)).to.equal(true);
   });
 }

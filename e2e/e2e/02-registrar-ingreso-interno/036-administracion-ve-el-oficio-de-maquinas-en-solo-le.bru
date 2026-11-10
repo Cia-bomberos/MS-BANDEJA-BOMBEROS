@@ -1,5 +1,5 @@
 meta {
-  name: Administración ve el Oficio de Máquinas en solo lectura
+  name: Administración ve y puede gestionar el Oficio de Máquinas
   type: http
   seq: 36
 }
@@ -22,7 +22,7 @@ tests {
     expect(res.body.estado).to.equal("Pendiente");
     expect(res.body.seccion_responsable).to.equal("Maquinas");
   });
-  test("en solo lectura para esta cuenta", function () {
-    expect(res.body.solo_lectura).to.equal(true);
+  test("esta cuenta puede gestionarlo", function () {
+    expect(res.body.solo_lectura).to.equal(false);
   });
 }

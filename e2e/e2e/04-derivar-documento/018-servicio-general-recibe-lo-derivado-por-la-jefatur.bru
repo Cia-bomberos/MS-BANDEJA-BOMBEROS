@@ -1,5 +1,5 @@
 meta {
-  name: Servicio General recibe lo derivado por la Jefatura
+  name: Servicio General recibe lo derivado por la Administración
   type: http
   seq: 18
 }
@@ -25,9 +25,9 @@ tests {
   test("esta cuenta puede gestionarlo", function () {
     expect(res.body.solo_lectura).to.equal(false);
   });
-  test("la derivación de la Jefatura guarda su nota «La Jefatura asigna el documento a Servicio General.»", function () {
+  test("la derivación de la Administración guarda su nota «La Administración asigna el documento a Servicio General.»", function () {
     const x = (res.body.historial || []).filter(h => h.accion === "derivacion")[0];
     expect(x, "derivacion número 1 en el historial").to.exist;
-    expect(JSON.stringify(x)).to.contain("La Jefatura asigna el documento a Servicio General.");
+    expect(JSON.stringify(x)).to.contain("La Administración asigna el documento a Servicio General.");
   });
 }
