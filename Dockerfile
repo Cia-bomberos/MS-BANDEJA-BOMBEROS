@@ -2,7 +2,7 @@ FROM python:3.11-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache gcc musl-dev postgresql-dev
+RUN apk upgrade --no-cache
 
 COPY requirements.txt ./
 

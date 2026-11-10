@@ -107,7 +107,7 @@ pipeline {
             steps {
                 sh '''
                     set -e
-                    docker build -t "$IMAGEN" .
+                    docker build --pull -t "$IMAGEN" .
 
                     TRIVY="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ ${TRIVY_IMAGE}"
 
